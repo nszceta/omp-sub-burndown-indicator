@@ -46,6 +46,15 @@ describe("mergeSnapshots", () => {
     expect(merged?.limits[0]?.limit.amount.usedFraction).toBe(0.5);
   });
 
+  test("host auth identity outranks broker identity", () => {
+    const [merged] = mergeSnapshots([
+      [snapshot("omp-broker", 2_000, 0.5)],
+      [snapshot("omp-auth-storage", 1_000, 0.4)],
+    ]);
+    expect(merged?.identitySource).toBe("omp-auth-storage");
+    expect(merged?.limits[0]?.measurementSource).toBe("omp-broker");
+  });
+
   test("different stable account IDs never merge", () => {
     const other = snapshot("provider-endpoint", 2_000, 0.7);
     other.id = "anthropic:account:other";

@@ -1,7 +1,14 @@
 import { visibleWidth } from "@oh-my-pi/pi-tui";
 import type { BurndownSegment, SegmentState } from "../domain/types";
-import { buildStableLabels, labelFor, type StableLabels } from "./labels";
-import { type BurndownSymbols, type SymbolMode, segmentSignal, symbolsFor } from "./symbols";
+import { buildStableLabels, labelFor, providerLabelFor, type StableLabels } from "./labels";
+import {
+  type BurndownSymbols,
+  describeSegmentSignal,
+  type SymbolMode,
+  segmentSignal,
+  segmentSignalWithUnit,
+  symbolsFor,
+} from "./symbols";
 
 export interface BurndownTheme {
   fg(color: string, text: string): string;
@@ -29,7 +36,12 @@ function resetCountdown(resetsAt: number | undefined, now: number): string {
   const hour = 60 * minute;
   const day = 24 * hour;
   if (remaining >= day) return `${Math.ceil(remaining / day)}d`;
-  if (remaining >= hour) return `${Math.ceil(remaining / hour)}h`;
+  if (remaining >= hour) {
+    const totalMinutes = Math.ceil(remaining / minute);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`;
+  }
   if (remaining >= minute) return `${Math.ceil(remaining / minute)}m`;
   return "<1m";
 }
@@ -105,15 +117,31 @@ function formsFor(
   theme: BurndownTheme | undefined,
 ): RenderedForms {
   const color = colorFor(segment);
-  const signal = style(theme, color, segmentSignal(segment, symbols));
+  const fullSignal = style(theme, color, describeSegmentSignal(segment, symbols));
+  const compactSignal = style(theme, color, segmentSignalWithUnit(segment, symbols));
+  const minimalSignal = style(theme, color, segmentSignal(segment, symbols));
   const separator = " ";
-  const compact = `${style(theme, "muted", labelFor(labels, segment.subscriptionId, "compact"))}${separator}${signal}`;
-  const minimal = `${style(theme, "muted", labelFor(labels, segment.subscriptionId, "minimal"))}${signal}`;
+  const provider = providerLabelFor(labels, segment.subscriptionId, "full");
+  const providerMinimal = providerLabelFor(labels, segment.subscriptionId, "minimal");
+  const account = labelFor(labels, segment.subscriptionId, "full");
+  const accountCompact = labelFor(labels, segment.subscriptionId, "compact");
+  const accountMinimal = labelFor(labels, segment.subscriptionId, "minimal");
+  const hasDistinctAccount =
+    labels.accountRequired.has(segment.subscriptionId) &&
+    segment.label.trim().length > 0 &&
+    segment.label.trim().toLocaleLowerCase() !== segment.provider.trim().toLocaleLowerCase();
+  const qualifiedLabel = hasDistinctAccount ? `${provider}:${account}` : provider;
+  const qualifiedCompact = hasDistinctAccount ? `${provider}:${accountCompact}` : provider;
+  const qualifiedMinimal = hasDistinctAccount
+    ? `${providerMinimal}:${accountMinimal}`
+    : providerMinimal;
+  const compact = `${style(theme, "muted", qualifiedCompact)}${separator}${compactSignal}`;
+  const minimal = `${style(theme, "muted", qualifiedMinimal)}${minimalSignal}`;
   const reset = showReset ? resetCountdown(segment.resetsAt, now) : "";
-  const fullLabel = style(theme, "muted", labelFor(labels, segment.subscriptionId, "full"));
+  const fullLabel = style(theme, "muted", qualifiedLabel);
   const full = reset
-    ? `${fullLabel}${separator}${signal}${separator}${style(theme, "dim", reset)}`
-    : `${fullLabel}${separator}${signal}`;
+    ? `${fullLabel}${separator}${fullSignal}${separator}${style(theme, "dim", reset)}`
+    : `${fullLabel}${separator}${fullSignal}`;
   return { full, compact, minimal };
 }
 

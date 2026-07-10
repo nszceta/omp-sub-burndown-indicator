@@ -1,6 +1,10 @@
 import type { UsageLimit } from "@oh-my-pi/pi-ai";
 
-export type UsageSourceId = "omp-broker" | "omp-response" | "provider-endpoint";
+export type UsageSourceId =
+  | "omp-auth-storage"
+  | "omp-broker"
+  | "omp-response"
+  | "provider-endpoint";
 
 export interface LimitObservation {
   limit: UsageLimit;

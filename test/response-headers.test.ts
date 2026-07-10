@@ -52,17 +52,59 @@ describe("ResponseHeaderUsageSource", () => {
     expect(source.current()[0]?.limits[0]?.measurementSource).toBe("omp-response");
   });
 
-  test("rejects ambiguous providers and never creates an identity", () => {
+  test("rejects ambiguous authoritative providers", () => {
     const source = new ResponseHeaderUsageSource({ providers: [parser()] });
     source.setAuthoritativeSnapshots([authoritative("demo:a"), authoritative("demo:b")]);
     expect(source.ingest("demo", { "x-demo-used": "20", "x-demo-reset": "2000" }, 1_000)).toBe(
       false,
     );
-    source.setAuthoritativeSnapshots([]);
-    expect(source.ingest("demo", { "x-demo-used": "20", "x-demo-reset": "2000" }, 1_000)).toBe(
-      false,
+    expect(source.current()).toHaveLength(2);
+  });
+
+  test("creates and preserves a provider-only snapshot from complete headers", () => {
+    const source = new ResponseHeaderUsageSource({ providers: [parser()] });
+    expect(source.ingest("DEMO", { "x-demo-used": "20", "x-demo-reset": "2000" }, 1_000)).toBe(
+      true,
     );
-    expect(source.current()).toHaveLength(0);
+    expect(source.current()).toEqual([
+      {
+        id: "provider:demo",
+        provider: "demo",
+        identitySource: "omp-response",
+        limits: [
+          {
+            limit: limit(0.2),
+            measurementSource: "omp-response",
+            fetchedAt: 1_000,
+            stale: false,
+          },
+        ],
+      },
+    ]);
+
+    source.setAuthoritativeSnapshots([]);
+    expect(source.current()).toHaveLength(1);
+  });
+
+  test("promotes a provisional response measurement into one authoritative identity", () => {
+    const source = new ResponseHeaderUsageSource({ providers: [parser()] });
+    expect(source.ingest("demo", { "x-demo-used": "20", "x-demo-reset": "2000" }, 1_000)).toBe(
+      true,
+    );
+    source.setAuthoritativeSnapshots([authoritative("demo:account:a")]);
+    expect(source.current()).toEqual([
+      {
+        ...authoritative("demo:account:a"),
+        limits: [
+          {
+            limit: limit(0.2),
+            measurementSource: "omp-response",
+            fetchedAt: 1_000,
+            stale: false,
+          },
+        ],
+      },
+    ]);
   });
 
   test("ignores unsupported and partial header sets", () => {

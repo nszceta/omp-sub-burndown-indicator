@@ -71,7 +71,7 @@ function reportIdentity(
   const metadataOrg = metadataValue(metadata, "orgId");
   if (metadataAccount) accountIds.add(metadataAccount);
   if (metadataProject) projectIds.add(metadataProject);
-  const accountLabel = metadataValue(metadata, "accountLabel");
+  const accountLabel = metadataValue(metadata, "accountLabel") ?? metadataValue(metadata, "email");
   if (metadataOrg) orgIds.add(metadataOrg);
 
   for (const limit of report.limits) {

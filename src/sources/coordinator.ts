@@ -7,6 +7,7 @@ import type {
 import type { UsageSource } from "./source.ts";
 
 const IDENTITY_RANK: Record<UsageSourceId, number> = {
+  "omp-auth-storage": 4,
   "omp-broker": 3,
   "provider-endpoint": 2,
   "omp-response": 1,
@@ -98,7 +99,7 @@ export class SourceCoordinator {
           .filter((provider) => !reported.has(provider))
           .map((provider) => [
             provider,
-            "no broker report, supported response headers, or explicit endpoint credential",
+            "no host auth report, broker report, supported response headers, or explicit endpoint credential",
           ]),
       ),
       ambiguities: [],

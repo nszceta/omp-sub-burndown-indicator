@@ -9,6 +9,7 @@ import type {
 } from "../domain/types.ts";
 import { BurndownRowComponent } from "../render/row.ts";
 import { mergeSnapshots, SourceCoordinator } from "../sources/coordinator.ts";
+import { OmpAuthStorageUsageSource } from "../sources/omp-auth-storage.ts";
 import { OmpBrokerUsageSource } from "../sources/omp-broker.ts";
 import { discoverProviders } from "../sources/omp-models.ts";
 import {
@@ -148,8 +149,22 @@ export class IndicatorController {
       unavailableProviders: {},
       ambiguities: [],
     };
+    const reportedProviders = [
+      ...new Set(this.#currentSnapshots().map((snapshot) => snapshot.provider)),
+    ].sort();
+    const reported = new Set(reportedProviders);
+    const unavailableProviders = Object.fromEntries(
+      diagnostic.discoveredProviders
+        .filter((provider) => !reported.has(provider))
+        .map((provider) => [
+          provider,
+          "no host auth report, broker report, supported response headers, or explicit endpoint credential",
+        ]),
+    );
     return {
       ...diagnostic,
+      reportedProviders,
+      unavailableProviders,
       ...(this.#configError ? { configError: this.#configError } : {}),
       active: this.active,
       generation: this.#generation,
@@ -198,7 +213,7 @@ export class IndicatorController {
     }
 
     const providers = modelProviders(ctx);
-    const sources = this.#buildSources(providers);
+    const sources = this.#buildSources(ctx, providers);
     this.#sources = sources;
     this.#coordinator = new SourceCoordinator(sources);
     this.#coordinator.setDiscoveredProviders(providers);
@@ -219,10 +234,15 @@ export class IndicatorController {
     if (!this.#disposed && generation === this.#generation) this.#scheduleTimeRender();
   }
 
-  #buildSources(providers: readonly string[]): UsageSource[] {
+  #buildSources(ctx: ExtensionContext, providers: readonly string[]): UsageSource[] {
     if (this.#options.sources) return [...this.#options.sources];
     const config = this.#config;
     if (!config) return [];
+    const authStorage = new OmpAuthStorageUsageSource({
+      registry: ctx.modelRegistry,
+      staleAfterMs: config.staleAfterMs,
+      ...(this.#options.now ? { now: this.#options.now } : {}),
+    });
     const response = new ResponseHeaderUsageSource();
     const broker = new OmpBrokerUsageSource(config);
     const endpoint = new ProviderEndpointUsageSource({
@@ -232,7 +252,7 @@ export class IndicatorController {
       timeoutMs: config.timeoutMs,
       staleAfterMs: config.staleAfterMs,
     });
-    return [broker, response, endpoint];
+    return [authStorage, broker, response, endpoint];
   }
 
   #setDiscoveredProviders(ctx: ExtensionContext): void {

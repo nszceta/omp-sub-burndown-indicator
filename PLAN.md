@@ -43,8 +43,9 @@ The plan must preserve these host boundaries:
 6. `ctx.getContextUsage()` reports model context-window use, not account/subscription quotas, and must not be used for this feature.
 7. `after_provider_response` exposes response status, headers, and request ID. It does not identify an account and does not directly provide a normalized subscription usage report.
 8. OMP’s public `@oh-my-pi/pi-ai` package exports provider-agnostic `UsageReport`, `UsageLimit`, `UsageWindow`, `resolveUsedFraction`, provider usage adapters, and broker client support.
-9. An OMP auth broker or auth gateway exposes authenticated `GET /v1/usage`, returning normalized usage reports. This is the preferred complete source when configured.
-10. The extension API does not expose OMP’s local credential store or auth-storage usage cache. The plugin must never import those coding-agent internals, open `agent.db`, inspect auth cache files, or patch OMP.
+9. `ctx.modelRegistry.authStorage.fetchUsageReports()` is a public, read-only normalized usage API and is the same cached report path used by OMP’s built-in `/usage` command.
+10. An OMP auth broker or auth gateway also exposes authenticated `GET /v1/usage`, returning normalized usage reports.
+11. The plugin must never import coding-agent internals, open `agent.db`, inspect auth cache files, read credential values, or patch OMP.
 
 Reference contracts used during implementation:
 
@@ -61,6 +62,7 @@ Reference contracts used during implementation:
 - Public OMP extension integration only.
 - Discovery of candidate providers from public OMP model context.
 - Normalized aggregation of subscription usage reports.
+- OMP authenticated usage retrieval through the public extension context.
 - OMP broker/gateway usage retrieval.
 - Opportunistic ingestion of supported provider rate-limit response headers.
 - Direct supported usage-endpoint fallback through public `@oh-my-pi/pi-ai` adapters when the plugin has explicitly configured credentials.
@@ -83,13 +85,14 @@ Reference contracts used during implementation:
 
 ## Feasibility boundary
 
-A complete “each subscription” view is possible without OMP internal access only when at least one authoritative public source can identify the subscription/account and its limit windows:
+A complete “each subscription” view is possible without private OMP access when at least one public source identifies the subscription/account and its limit windows:
 
-1. configured OMP auth broker/gateway `/v1/usage`; or
-2. a supported provider usage endpoint with credentials explicitly supplied to the plugin; or
-3. response rate-limit headers containing enough provider/window data to normalize safely.
+1. `ctx.modelRegistry.authStorage.fetchUsageReports()`, the default OMP-auth source;
+2. configured OMP auth broker/gateway `/v1/usage`;
+3. a supported provider usage endpoint with credentials explicitly supplied to the plugin; or
+4. response rate-limit headers containing enough provider/window data to normalize safely.
 
-`ctx.models.list()` alone is not sufficient: it identifies authenticated models, not accounts, quota windows, reset timestamps, or usage fractions. If none of the three sources is available for a provider, the plugin must show that subscription/provider as unavailable or omit it according to configuration. It must not invent a quota.
+`ctx.models.list()` alone is not sufficient: it identifies authenticated models, not accounts, quota windows, reset timestamps, or usage fractions. Providers omitted by all four sources must be reported as unavailable. The plugin must not invent a quota.
 
 ## Proposed repository layout
 
@@ -109,6 +112,7 @@ src/
     source.ts
     coordinator.ts
     omp-models.ts
+    omp-auth-storage.ts
     omp-broker.ts
     response-headers.ts
     provider-endpoints.ts
@@ -124,6 +128,7 @@ test/
   normalize.test.ts
   source-coordinator.test.ts
   broker-source.test.ts
+  auth-storage-source.test.ts
   response-headers.test.ts
   row.test.ts
   extension.test.ts
@@ -196,7 +201,11 @@ interface UsageSource {
 }
 ```
 
-### Source 1: OMP broker/gateway — preferred
+### Source 1: OMP authenticated usage — preferred
+
+`OmpAuthStorageUsageSource` calls the public `ctx.modelRegistry.authStorage.fetchUsageReports()` API with the registry’s provider base-URL resolver and refresh abort signal. It normalizes the same cached, account-identified reports displayed by `/usage`, never receives credential values, and has the strongest identity precedence.
+
+### Source 2: OMP broker/gateway
 
 `OmpBrokerUsageSource` is authoritative when configured.
 
@@ -212,7 +221,7 @@ interface UsageSource {
 
 This source can cover multiple credentials/subscriptions without exposing provider credentials to the plugin and should win merge conflicts over less complete sources.
 
-### Source 2: public OMP response metadata — opportunistic
+### Source 3: public OMP response metadata — opportunistic
 
 `ResponseHeaderUsageSource` consumes `after_provider_response` events.
 
@@ -225,7 +234,7 @@ This source can cover multiple credentials/subscriptions without exposing provid
 
 Because the event does not carry a credential/account ID, this source is mainly a freshness improvement for the current provider; it is not the sole solution for multiple accounts on one provider.
 
-### Source 3: supported provider usage endpoints — fallback
+### Source 4: supported provider usage endpoints — fallback
 
 `ProviderEndpointUsageSource` is an adapter registry around usage providers publicly exported by `@oh-my-pi/pi-ai`.
 

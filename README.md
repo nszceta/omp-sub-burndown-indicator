@@ -3,22 +3,24 @@
 A standalone [Oh My Pi](https://omp.sh) extension that renders one segmented subscription-quota row immediately above the interactive editor.
 
 ```text
-Claude ▲12 · Codex ▼4 · Gemini =0
+Anthropic ▲12pp ahead · OpenAI Codex ▼4pp behind · Google Gemini =0pp on pace
 ```
 
-Each segment uses the eligible usage window with the shortest positive duration. The number is the rounded percentage-point difference between elapsed time and consumed quota:
+Each segment uses the eligible usage window with the shortest positive duration. The number is the rounded difference, in percentage points (`pp`), between elapsed time and consumed quota:
 
 ```text
 pace delta = elapsed fraction - used fraction
 ```
 
-Positive/ahead means quota-safe: less quota has been consumed than a linear burndown permits. Negative/behind means usage is over pace. An exhausted quota always renders as exhausted regardless of its calculated delta.
+For example, `▲12pp ahead` means usage is 12 percentage points below the linear consumption pace, so the quota is currently safe. `▼4pp behind` means usage is 4 percentage points over pace. This value is deliberately not the provider's `% used` or `% free`; it measures whether consumption is ahead of or behind schedule. An exhausted quota always renders as exhausted regardless of its calculated delta.
+
+Every segment always starts with the provider. The account identifier is omitted when that provider has exactly one account; it is shown only when two or more accounts for the same provider must be distinguished. Email abbreviations use only the local part before `@`, so `hi@adamgradzki.com` becomes `hi`, never a local/domain mixture such as `ha`. A true same-provider label collision uses an explicit ordinal such as `hi@adamgradzki.com#2`.
 
 ## Requirements
 
 - OMP 16.4 or later
 - Bun 1.3.14 or later
-- An authoritative usage source described below
+- A supported usage source described below
 
 This package uses only public OMP extension, AI usage, broker, and TUI APIs. It does not patch OMP.
 
@@ -57,9 +59,13 @@ The package manifest declares:
 
 ## Data sources
 
-Sources are merged by stable, non-secret subscription identity. Identity authority is broker, then direct endpoint. A newer complete header measurement may refresh an already identified limit, but headers never create an ambiguous account.
+Sources are merged by stable, non-secret subscription identity. Identity authority is OMP's authenticated usage service, then broker, direct endpoint, and finally a provider-only response snapshot. Complete headers remain a supplemental fast path; they never assign one response across multiple same-provider accounts.
 
-### 1. OMP auth broker or gateway (preferred)
+### 1. OMP authenticated usage (default)
+
+The extension calls the public `ctx.modelRegistry.authStorage.fetchUsageReports()` API—the same normalized, cached report path used by OMP's built-in `/usage` command. No duplicate credentials or broker configuration are required. Account IDs and email labels come from OMP's normalized report metadata; credential values are never returned to the extension.
+
+### 2. OMP auth broker or gateway
 
 Configure the documented broker environment variables:
 
@@ -80,18 +86,18 @@ export OMP_SUB_BURNDOWN_BROKER_TOKEN='...'
 
 `OMP_AUTH_BROKER_URL` and `OMP_AUTH_BROKER_TOKEN` take precedence over the aliases. A URL/token pair must be complete. A half-configured pair produces a diagnostic and no unauthenticated request.
 
-### 2. Provider response headers
+### 3. Provider response headers
 
 The extension listens to public `after_provider_response` metadata and invokes only public `@oh-my-pi/pi-ai` rate-limit parsers. A header report is accepted only when:
 
 - the current model provider has a supported public parser;
 - the report contains a complete used fraction, positive duration, and finite reset;
-- exactly one authoritative subscription for that provider is already known; and
-- the header measurement is newer than the existing limit measurement.
+- at most one subscription for that provider is known; and
+- when refreshing an existing limit, the header measurement is newer.
 
-Headers cannot distinguish multiple credentials by themselves and are ignored when correlation is ambiguous.
+When no account-identified subscription exists, complete headers can create a lower-confidence `provider:<provider>` snapshot. If multiple account-identified subscriptions exist, headers are ignored because they cannot identify which credential produced the response. A later unique OMP-auth, broker, or endpoint identity replaces the provisional identity while retaining newer header measurements.
 
-### 3. Explicit direct endpoint credentials
+### 4. Explicit direct endpoint credentials
 
 Direct provider probes are opt-in. They use public `UsageProvider.fetchUsage` adapters and never inspect OMP's credential registry. Set one provider-specific extension variable:
 
@@ -132,25 +138,31 @@ The public extension API does not expose installed plugin-manager setting values
 
 ## Symbols and ordering
 
-| State | Unicode | ASCII | Meaning |
+| State | Unicode full form | ASCII full form | Meaning |
 | --- | --- | --- | --- |
-| Ahead | `▲12` | `+12` | 12 percentage points under linear consumption pace |
-| Behind | `▼4` | `-4` | 4 percentage points over linear consumption pace |
-| On pace | `=0` | `=0` | Within configured tolerance |
-| Exhausted | `!` | `!` | Used fraction is at least 100% |
-| Unknown | `?` | `?` | No eligible authoritative window |
-| Stale | `~` prefix | `~` prefix | Last-good data retained after a transient failure |
+| Ahead | `▲12pp ahead` | `+12pp ahead` | Usage is 12 percentage points below linear consumption pace |
+| Behind | `▼4pp behind` | `-4pp behind` | Usage is 4 percentage points above linear consumption pace |
+| On pace | `=0pp on pace` | `=0pp on pace` | Within configured tolerance |
+| Exhausted | `! exhausted` | `! exhausted` | Used fraction is at least 100% |
+| Unknown | `? unknown` | `? unknown` | No eligible authoritative window |
+| Stale | `~` prefix and `(stale)` suffix | same | Last-good data retained after a transient failure |
 
 Color is redundant; the glyph remains authoritative in no-color and color-blind terminals. OMP theme colors are used rather than hard-coded ANSI colors.
 
-Segments are risk-sorted: exhausted, most behind, on pace, least ahead to most ahead, then unknown/stale. Width degradation is deterministic:
+Segments are risk-sorted: exhausted, most behind, on pace, least ahead to most ahead, then unknown/stale. A provider with one account renders without an account identifier:
 
-1. `Claude ▲12 2h`
-2. `Cl ▲12`
-3. `C▲12`
+```text
+Anthropic ▲12pp ahead 2h
+```
+
+When one provider has multiple accounts, width degradation retains both identities:
+
+1. `Anthropic:hi@adamgradzki.com ▲12pp ahead 2h`
+2. `Anthropic:hi ▲12pp`
+3. `An:h▲12`
 4. urgent segments plus `+N` hidden count
 
-The renderer measures visible terminal cells, including ANSI and wide Unicode handling. It emits zero or one line and never wraps. If no meaningful direction and magnitude fit, it emits no row.
+Provider names use readable brands (`Anthropic`, `OpenAI Codex`, `Google Gemini`) instead of internal provider IDs. The renderer measures visible terminal cells, including ANSI and wide Unicode handling. It emits zero or one line and never wraps. If no meaningful direction and magnitude fit, it emits no row.
 
 ## Diagnostics
 
@@ -160,7 +172,7 @@ Run:
 /burndown-status
 ```
 
-The command reports enabled sources, last successful refresh, error category, discovered providers, authoritative reported providers, and why a provider is unavailable. Tokens, authorization headers, raw error bodies, URL credentials, and provider secrets are never included.
+The command reports enabled sources, last successful refresh, error category, discovered providers, reported providers, and why a provider is unavailable. In a normal interactive OMP session, `omp-auth-storage` should be enabled and report the same providers as `/usage`. Tokens, authorization headers, raw error bodies, URL credentials, and provider secrets are never included.
 
 ## Host modes
 
@@ -173,23 +185,19 @@ Exact placement is guaranteed only in interactive OMP.
 
 ## Privacy and security
 
-- No OMP database, `agent.db`, credential store, auth cache, token file, or coding-agent internal module is opened.
+- The extension uses OMP's public, read-only auth usage API. It does not open `agent.db`, credential files, auth caches, token files, or coding-agent internal modules.
 - No context-window token usage is treated as account quota usage.
 - No quota is estimated from chat token counts.
-- Broker and provider operations are read-only, bounded, abortable, and single-flight through the runtime coordinator.
-- Secrets are held only in process environment memory and are not persisted by the extension.
-- Stable IDs use provider plus account/project/org scope. Tokens, API keys, credential hashes, mutable labels, and array positions are never IDs.
-- Different accounts are never merged merely because their provider matches.
+- Usage operations are read-only, abortable, and single-flight through the runtime coordinator and OMP's usage cache.
+- Host credential values are never returned by the usage API. Explicit endpoint secrets are held only in process environment memory and are not persisted by the extension.
+- Stable account IDs use provider plus account/project/org scope. A response-only report uses a clearly provisional provider-only ID until one unique stronger identity is available. Tokens, API keys, credential hashes, mutable labels, and array positions are never IDs.
+- Different identified accounts are never merged merely because their provider matches.
 
-## Data-access limitation
+## Data-access behavior
 
-OMP's public extension API exposes authenticated models, not local credential identities or subscription usage windows. Without at least one of the following, the extension cannot display an authoritative quota and will show nothing or report the provider as unavailable:
+OMP's public extension context exposes the model registry's normalized auth usage reports. This is the default source and matches the data used by `/usage`. Broker data, explicit endpoint credentials, and complete response headers remain fallbacks or supplemental measurements.
 
-1. broker/gateway `/v1/usage` data;
-2. a supported direct endpoint credential explicitly supplied to this extension; or
-3. usable public response headers that can be correlated to one already identified subscription.
-
-The extension does not bypass this boundary or invent a quota.
+Providers without an OMP usage adapter or a complete upstream quota window remain unavailable. Response-only data identifies the active provider, not a particular account, so it is accepted only while that provider is unambiguous. The extension does not inspect credential values, estimate quota, or assign anonymous data across multiple accounts.
 
 ## Troubleshooting
 
@@ -207,7 +215,7 @@ A transient timeout, network failure, 429, or 5xx preserves last-good data with 
 
 ### Multiple accounts are missing
 
-Each account needs a stable non-secret account/project/org identity from its authoritative report. Anonymous same-provider reports are excluded to prevent cross-account contamination.
+Each account needs a stable non-secret account/project/org identity from an authoritative report. Response headers can provide one provisional provider-level row, but cannot split usage among multiple credentials; ambiguous same-provider headers are ignored to prevent cross-account contamination.
 
 ## Verification
 
@@ -220,14 +228,15 @@ bun run check
 bun pm pack
 ```
 
-Manual interactive smoke test with a configured authoritative source:
+Manual interactive smoke test with OMP authenticated providers:
 
 1. Install or link the plugin.
 2. Start interactive `omp` and confirm one row appears directly above the editor.
-3. Resize to narrow and wide terminal widths; confirm the row remains one line and degrades to compact forms with `+N`.
-4. Switch themes; confirm semantic glyphs remain readable with and without color.
-5. Change the fake or real usage response and confirm the row refreshes.
-6. Switch sessions and navigate the session tree; confirm only one refreshed row remains.
-7. Exit OMP; confirm shutdown clears the widget and leaves no poller.
+3. Run `/usage`, then `/burndown-status`; confirm `omp-auth-storage` is enabled and the reported providers match eligible `/usage` providers.
+4. Resize to narrow and wide terminal widths; confirm the row remains one line and degrades to compact forms with `+N`.
+5. Switch themes; confirm semantic glyphs remain readable with and without color.
+6. Change the fake or real usage response and confirm the row refreshes.
+7. Switch sessions and navigate the session tree; confirm only one refreshed row remains.
+8. Exit OMP; confirm shutdown clears the widget and leaves no poller.
 
 The automated suite also covers headless/RPC/ACP-safe no-op behavior through fake public host contexts, cancellation and generation guards, stale expiry, source precedence, and exact rendering widths.

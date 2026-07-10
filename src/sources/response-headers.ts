@@ -10,6 +10,7 @@ import {
   type UsageProvider,
   zaiUsageProvider,
 } from "@oh-my-pi/pi-ai";
+import { normalizeUsageReport } from "../domain/normalize.ts";
 import type { LimitObservation, SubscriptionSnapshot } from "../domain/types.ts";
 import type { UsageSource } from "./source.ts";
 
@@ -69,11 +70,11 @@ function cloneSnapshot(snapshot: SubscriptionSnapshot): SubscriptionSnapshot {
   return { ...snapshot, limits: [...snapshot.limits] };
 }
 
-/** Correlates public response-header reports with one existing subscription. */
+/** Builds usage snapshots from public response-header reports. */
 export class ResponseHeaderUsageSource implements UsageSource {
   readonly id = "omp-response";
   readonly #parsers: ReadonlyMap<string, UsageProvider["parseRateLimitHeaders"]>;
-  #authoritative: SubscriptionSnapshot[] = [];
+  #snapshots: SubscriptionSnapshot[] = [];
 
   constructor(options: ResponseHeaderUsageSourceOptions = {}) {
     const parsers = new Map<string, UsageProvider["parseRateLimitHeaders"]>();
@@ -88,17 +89,45 @@ export class ResponseHeaderUsageSource implements UsageSource {
   }
 
   setAuthoritativeSnapshots(snapshots: readonly SubscriptionSnapshot[]): void {
-    this.#authoritative = snapshots
+    const authoritative = snapshots
       .filter(
         (snapshot) =>
+          snapshot.identitySource === "omp-auth-storage" ||
           snapshot.identitySource === "omp-broker" ||
           snapshot.identitySource === "provider-endpoint",
       )
       .map(cloneSnapshot);
+    for (const provisional of this.#snapshots.filter(
+      (snapshot) => snapshot.identitySource === "omp-response",
+    )) {
+      const candidates = authoritative.filter(
+        (snapshot) => snapshot.provider === provisional.provider,
+      );
+      if (candidates.length === 0) {
+        authoritative.push(cloneSnapshot(provisional));
+        continue;
+      }
+      if (candidates.length !== 1) continue;
+      const target = candidates[0];
+      if (!target) continue;
+      const observations = new Map(
+        target.limits.map((observation) => [observationKey(observation), observation]),
+      );
+      for (const observation of provisional.limits) {
+        const key = observationKey(observation);
+        const existing = observations.get(key);
+        if (!existing || observation.fetchedAt > existing.fetchedAt)
+          observations.set(key, observation);
+      }
+      target.limits = [...observations.values()].sort((a, b) =>
+        observationKey(a).localeCompare(observationKey(b)),
+      );
+    }
+    this.#snapshots = authoritative.sort((a, b) => a.id.localeCompare(b.id));
   }
 
   current(): SubscriptionSnapshot[] {
-    return this.#authoritative.map(cloneSnapshot);
+    return this.#snapshots.map(cloneSnapshot);
   }
 
   /** Returns true only when a complete report changed one unambiguous snapshot. */
@@ -107,24 +136,34 @@ export class ResponseHeaderUsageSource implements UsageSource {
     headers: Headers | Record<string, string | readonly string[]>,
     now = Date.now(),
   ): boolean {
-    const providerId = provider.trim();
+    const providerId = provider.trim().toLowerCase();
     if (!providerId) return false;
     const parser = this.#parsers.get(providerId);
     if (!parser) return false;
-    const candidates = this.#authoritative.filter((snapshot) => snapshot.provider === providerId);
-    if (candidates.length !== 1) return false;
 
     const report = parser(normalizeHeaders(headers), now);
-    if (!report || report.provider !== providerId) return false;
+    if (!report || report.provider.trim().toLowerCase() !== providerId) return false;
     const limits = report.limits.filter(completeLimit);
     if (limits.length === 0) return false;
-
-    const target = candidates[0];
-    if (!target) return false;
     const fetchedAt = Number.isFinite(report.fetchedAt) ? report.fetchedAt : now;
-    const incoming = limits.map((limit) => ({
+
+    const candidates = this.#snapshots.filter((snapshot) => snapshot.provider === providerId);
+    if (candidates.length > 1) return false;
+    const target = candidates[0];
+    if (!target) {
+      const snapshot = normalizeUsageReport(
+        { ...report, provider: providerId, fetchedAt, limits },
+        { measurementSource: "omp-response", providerIsUnambiguous: true, now },
+      );
+      if (!snapshot) return false;
+      this.#snapshots.push(snapshot);
+      this.#snapshots.sort((a, b) => a.id.localeCompare(b.id));
+      return true;
+    }
+
+    const incoming: LimitObservation[] = limits.map((limit) => ({
       limit,
-      measurementSource: "omp-response" as const,
+      measurementSource: "omp-response",
       fetchedAt,
       stale: false,
     }));
@@ -147,7 +186,7 @@ export class ResponseHeaderUsageSource implements UsageSource {
         observationKey(a).localeCompare(observationKey(b)),
       ),
     };
-    this.#authoritative[this.#authoritative.indexOf(target)] = updated;
+    this.#snapshots[this.#snapshots.indexOf(target)] = updated;
     return true;
   }
 

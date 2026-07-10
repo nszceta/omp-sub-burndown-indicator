@@ -61,4 +61,34 @@ export function segmentSignal(
   return `${stale}${symbolForState(segment.state, symbols)}${magnitude}`;
 }
 
+/** Add the percentage-point unit to pace deltas while preserving state glyphs. */
+export function segmentSignalWithUnit(
+  segment: Pick<BurndownSegment, "state" | "paceDelta" | "stale">,
+  symbols: BurndownSymbols,
+): string {
+  const signal = segmentSignal(segment, symbols);
+  return segment.state === "ahead" || segment.state === "behind" || segment.state === "on-pace"
+    ? `${signal}pp`
+    : signal;
+}
+
+/** Spell out what a pace delta means for the full-width indicator form. */
+export function describeSegmentSignal(
+  segment: Pick<BurndownSegment, "state" | "paceDelta" | "stale">,
+  symbols: BurndownSymbols,
+): string {
+  const signal = segmentSignalWithUnit(segment, symbols);
+  const meaning =
+    segment.state === "ahead"
+      ? "ahead"
+      : segment.state === "behind"
+        ? "behind"
+        : segment.state === "on-pace"
+          ? "on pace"
+          : segment.state === "exhausted"
+            ? "exhausted"
+            : "unknown";
+  return `${signal} ${meaning}${segment.stale ? " (stale)" : ""}`;
+}
+
 export const getSymbols = symbolsFor;
