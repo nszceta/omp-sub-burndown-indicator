@@ -26,13 +26,17 @@ This package uses only public OMP extension, AI usage, broker, and TUI APIs. It 
 
 ## Install
 
-From a registry release:
+This project is not published to the npm registry. npm removed TOTP as a
+supported 2FA method, and its passkey-based replacement is incompatible with
+the maintainer's password manager.
+
+Install directly from GitHub instead:
 
 ```sh
-omp plugin install omp-sub-burndown-indicator
+omp plugin install https://github.com/nszceta/omp-sub-burndown-indicator.git
 ```
 
-From a local checkout:
+Alternatively, install from a local checkout:
 
 ```sh
 bun install
