@@ -240,3 +240,7 @@ Manual interactive smoke test with OMP authenticated providers:
 8. Exit OMP; confirm shutdown clears the widget and leaves no poller.
 
 The automated suite also covers headless/RPC/ACP-safe no-op behavior through fake public host contexts, cancellation and generation guards, stale expiry, source precedence, and exact rendering widths.
+
+## License
+
+MIT License. Copyright (c) 2026 Adam Gradzki. See [LICENSE](LICENSE).

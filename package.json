@@ -6,7 +6,8 @@
   "license": "MIT",
   "files": [
     "src",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "exports": "./src/index.ts",
   "scripts": {
