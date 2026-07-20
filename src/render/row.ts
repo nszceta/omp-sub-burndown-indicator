@@ -1,6 +1,6 @@
 import { visibleWidth } from "@oh-my-pi/pi-tui";
+import type { DensityMode, LayoutMode } from "../config";
 import type { BurndownSegment, SegmentState } from "../domain/types";
-import type { DensityMode } from "../config";
 import { buildStableLabels, labelFor, providerLabelFor, type StableLabels } from "./labels";
 import {
   type BurndownSymbols,
@@ -19,6 +19,7 @@ export interface BurndownRenderOptions {
   theme?: BurndownTheme;
   symbols?: SymbolMode | BurndownSymbols;
   density?: DensityMode;
+  layout?: LayoutMode;
   showReset?: boolean;
   now?: number | (() => number);
   separator?: string;
@@ -180,6 +181,41 @@ function chooseForms(
   return chosen;
 }
 
+/**
+ * Pack segments line by line, keeping each segment's full form and moving
+ * whole segments to subsequent lines instead of degrading details to fit.
+ * A segment degrades only when its full form cannot fit an empty line.
+ */
+function wrapForms(forms: readonly RenderedForms[], width: number, separator: string): string[] {
+  const separatorWidth = visibleWidth(separator);
+  const lines: string[] = [];
+  let line: string[] = [];
+  let used = 0;
+  for (const form of forms) {
+    const available = width - used - (line.length > 0 ? separatorWidth : 0);
+    if (visibleWidth(form.full) <= available) {
+      line.push(form.full);
+      used += (line.length > 1 ? separatorWidth : 0) + visibleWidth(form.full);
+      continue;
+    }
+    if (line.length > 0) {
+      lines.push(line.join(separator));
+      line = [];
+      used = 0;
+    }
+    const first =
+      visibleWidth(form.full) <= width
+        ? form.full
+        : visibleWidth(form.compact) <= width
+          ? form.compact
+          : form.minimal;
+    line.push(first);
+    used = visibleWidth(first);
+  }
+  if (line.length > 0) lines.push(line.join(separator));
+  return lines;
+}
+
 /** Render zero or more lines, always within the supplied cell budget. */
 export function renderBurndownRow(
   segments: readonly BurndownSegment[],
@@ -208,6 +244,10 @@ export function renderBurndownRow(
     ),
   );
   const renderable = forms.filter((form) => visibleWidth(form.minimal) <= budget);
+  if (options.layout === "wrap") {
+    const wrapped = wrapForms(renderable, budget, separator);
+    return wrapped.length > 0 ? wrapped : EMPTY_ROWS;
+  }
   const lines: string[] = [];
   for (let start = 0; start < renderable.length; ) {
     let chosen: string[] | undefined;

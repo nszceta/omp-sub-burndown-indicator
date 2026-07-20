@@ -17,6 +17,7 @@ const config: BurndownConfig = {
   paceTolerance: 0.01,
   symbols: "ascii",
   density: "dense",
+  layout: "fit",
   showReset: false,
   clockSkewMs: 0,
 };

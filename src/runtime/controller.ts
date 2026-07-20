@@ -294,6 +294,7 @@ export class IndicatorController {
             this.#component = new BurndownRowComponent(theme as never, {
               symbols: this.#config?.symbols ?? "auto",
               density: this.#config?.density ?? "dense",
+              layout: this.#config?.layout ?? "fit",
               showReset: this.#config?.showReset ?? true,
             });
             this.#component.setSegments(this.#lastSegments);

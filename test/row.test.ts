@@ -311,4 +311,67 @@ describe("burndown row", () => {
     component.setSegments([segment("a", "behind", -0.1)]);
     expect(component.render(30)).not.toBe(first);
   });
+
+  test("wrap layout keeps full details and wraps whole segments to extra lines", () => {
+    const values = [
+      segment("one", "exhausted", 0, {
+        provider: "alpha",
+        usedFraction: 1,
+        resetsAt: now + 4 * 24 * 60 * 60_000,
+      }),
+      segment("two", "behind", -0.8, {
+        provider: "bravo",
+        usedFraction: 0.9,
+        resetsAt: now + 6 * 24 * 60 * 60_000,
+      }),
+      segment("three", "ahead", 0.23, {
+        provider: "charlie",
+        usedFraction: 0.22,
+        resetsAt: now + 3 * 60 * 60_000,
+      }),
+      segment("four", "on-pace", 0, {
+        provider: "delta",
+        usedFraction: 0.5,
+        resetsAt: now + 2 * 60 * 60_000,
+      }),
+    ];
+    const width = 100;
+    const fit = renderBurndownRow(values, width, { now, theme: identityTheme });
+    expect(fit).toHaveLength(1);
+    expect(fit.join(" ")).not.toContain("50% left");
+
+    const wrapped = renderBurndownRow(values, width, {
+      now,
+      theme: identityTheme,
+      layout: "wrap",
+    });
+    expect(wrapped.length).toBeGreaterThan(1);
+    for (const line of wrapped) expect(visibleWidth(line)).toBeLessThanOrEqual(width);
+    const all = wrapped.join(" · ");
+    expect(all).toContain("Alpha ! exhausted · 0% left");
+    expect(all).toContain("Delta");
+    expect(all).toContain("50% left");
+    expect(all.indexOf("Alpha")).toBeLessThan(all.indexOf("Delta"));
+  });
+
+  test("wrap layout matches fit layout when every full form fits one line", () => {
+    const values = [
+      segment("one", "ahead", 0.1, { provider: "alpha", resetsAt: now + 2 * 60 * 60_000 }),
+      segment("two", "behind", -0.1, { provider: "bravo", resetsAt: now + 3 * 60 * 60_000 }),
+    ];
+    const options = { now, theme: identityTheme } as const;
+    expect(renderBurndownRow(values, 200, { ...options, layout: "wrap" })).toEqual(
+      renderBurndownRow(values, 200, options),
+    );
+  });
+
+  test("wrap layout still degrades a single segment whose full form exceeds the width", () => {
+    const value = segment("only", "ahead", 0.12, {
+      provider: "alpha",
+      resetsAt: now + 2 * 60 * 60_000,
+    });
+    const lines = renderBurndownRow([value], 10, { now, theme: identityTheme, layout: "wrap" });
+    expect(lines).toEqual(["Alpha▲12"]);
+    expect(visibleWidth(lines[0] ?? "")).toBeLessThanOrEqual(10);
+  });
 });

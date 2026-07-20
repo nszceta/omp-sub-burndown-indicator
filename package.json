@@ -27,6 +27,12 @@
         "description": "Pace signal density",
         "values": ["dense", "text"],
         "default": "dense"
+      },
+      "layout": {
+        "type": "enum",
+        "description": "Row layout: fit shrinks details to keep every subscription on one line; wrap keeps full details and moves whole segments to extra lines",
+        "values": ["fit", "wrap"],
+        "default": "fit"
       }
     }
   },
