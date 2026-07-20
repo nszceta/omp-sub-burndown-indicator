@@ -61,14 +61,14 @@ export function segmentSignal(
   return `${stale}${symbolForState(segment.state, symbols)}${magnitude}`;
 }
 
-/** Add the percentage-point unit to pace deltas while preserving state glyphs. */
+/** Add the fully spelled-out pace-point unit while preserving state glyphs. */
 export function segmentSignalWithUnit(
   segment: Pick<BurndownSegment, "state" | "paceDelta" | "stale">,
   symbols: BurndownSymbols,
 ): string {
   const signal = segmentSignal(segment, symbols);
   return segment.state === "ahead" || segment.state === "behind" || segment.state === "on-pace"
-    ? `${signal}pp`
+    ? `${signal} points`
     : signal;
 }
 

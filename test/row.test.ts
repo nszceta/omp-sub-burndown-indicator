@@ -23,10 +23,22 @@ const segment = (
 const identityTheme = { fg: (_color: string, text: string) => text };
 
 describe("burndown row", () => {
-  test("shows minute granularity for remaining hours", () => {
-    expect(formatResetCountdown(now + 2 * 60 * 60_000 + 30 * 60_000, now)).toBe("2h 30m");
+  test("shows precise minute granularity for every reset duration", () => {
+    expect(formatResetCountdown(now + 2 * 60 * 60_000 + 30 * 60_000, now)).toBe("2h30m");
     expect(formatResetCountdown(now + 2 * 60 * 60_000, now)).toBe("2h");
-    expect(formatResetCountdown(now + 2 * 60 * 60_000 + 1, now)).toBe("2h 1m");
+    expect(formatResetCountdown(now + 2 * 60 * 60_000 + 1, now)).toBe("2h1m");
+    expect(formatResetCountdown(now + 6 * 24 * 60 * 60_000 + 4 * 60 * 60_000 + 60_001, now)).toBe(
+      "6d4h2m",
+    );
+  });
+  test("shows quota left and the detailed reset in the full form", () => {
+    const value = segment("codex", "behind", -0.61, {
+      resetsAt: now + 6 * 24 * 60 * 60_000 + 4 * 60 * 60_000 + 60_001,
+      usedFraction: 0.88,
+    });
+    expect(renderBurndownRow([value], 200, { now, theme: identityTheme })).toEqual([
+      "Provider ▼61 points behind · 12% left · 6d4h2m",
+    ]);
   });
 
   test("renders every state and both symbol modes", () => {
@@ -44,14 +56,14 @@ describe("burndown row", () => {
       symbols: "ascii",
       theme: identityTheme,
     }).join("");
-    expect(unicode).toContain("▲12pp ahead");
-    expect(unicode).toContain("▼4pp behind");
-    expect(unicode).toContain("=0pp on pace");
+    expect(unicode).toContain("▲12 points ahead");
+    expect(unicode).toContain("▼4 points behind");
+    expect(unicode).toContain("=0 points on pace");
     expect(unicode).toContain("! exhausted");
     expect(unicode).toContain("? unknown");
-    expect(unicode).toContain("~▲10pp ahead (stale)");
-    expect(ascii).toContain("+12pp ahead");
-    expect(ascii).toContain("-4pp behind");
+    expect(unicode).toContain("~▲10 points ahead (stale)");
+    expect(ascii).toContain("+12 points ahead");
+    expect(ascii).toContain("-4 points behind");
   });
 
   test("fits exact visible width and emits no line when no signal fits", () => {
@@ -103,7 +115,7 @@ describe("burndown row", () => {
       showReset: false,
       theme: identityTheme,
     }).join("");
-    expect(full).toBe("Anthropic ▲10pp ahead · OpenAI Codex ▲10pp ahead");
+    expect(full).toBe("Anthropic ▲10 points ahead · OpenAI Codex ▲10 points ahead");
     expect(full).not.toContain("adamgradzki");
     expect(full).not.toContain("#2");
 
@@ -135,8 +147,8 @@ describe("burndown row", () => {
       showReset: false,
       theme: identityTheme,
     }).join("");
-    expect(full).toContain("Anthropic:hi@adamgradzki.com ▲10pp ahead");
-    expect(full).toContain("Anthropic:work@adamgradzki.com ▲10pp ahead");
+    expect(full).toContain("Anthropic:hi@adamgradzki.com ▲10 points ahead");
+    expect(full).toContain("Anthropic:work@adamgradzki.com ▲10 points ahead");
 
     const minimal = renderBurndownRow(values, 17, {
       now,

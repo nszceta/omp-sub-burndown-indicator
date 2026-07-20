@@ -33,16 +33,13 @@ function resetCountdown(resetsAt: number | undefined, now: number): string {
   if (resetsAt === undefined || !Number.isFinite(resetsAt)) return "";
   const remaining = Math.max(0, resetsAt - now);
   const minute = 60_000;
-  const hour = 60 * minute;
-  const day = 24 * hour;
-  if (remaining >= day) return `${Math.ceil(remaining / day)}d`;
-  if (remaining >= hour) {
-    const totalMinutes = Math.ceil(remaining / minute);
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
-    return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`;
-  }
-  if (remaining >= minute) return `${Math.ceil(remaining / minute)}m`;
+  const totalMinutes = Math.ceil(remaining / minute);
+  const days = Math.floor(totalMinutes / (24 * 60));
+  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+  const minutes = totalMinutes % 60;
+  if (days > 0) return `${days}d${hours > 0 ? `${hours}h` : ""}${minutes > 0 ? `${minutes}m` : ""}`;
+  if (hours > 0) return `${hours}h${minutes > 0 ? `${minutes}m` : ""}`;
+  if (minutes > 0) return `${minutes}m`;
   return "<1m";
 }
 
@@ -108,6 +105,11 @@ interface RenderedForms {
   minimal: string;
 }
 
+function remainingQuota(usedFraction: number | undefined): string {
+  if (usedFraction === undefined || !Number.isFinite(usedFraction)) return "";
+  return `${Math.round(Math.max(0, 1 - usedFraction) * 100)}% left`;
+}
+
 function formsFor(
   segment: BurndownSegment,
   labels: StableLabels,
@@ -138,9 +140,13 @@ function formsFor(
   const compact = `${style(theme, "muted", qualifiedCompact)}${separator}${compactSignal}`;
   const minimal = `${style(theme, "muted", qualifiedMinimal)}${minimalSignal}`;
   const reset = showReset ? resetCountdown(segment.resetsAt, now) : "";
+  const remaining = remainingQuota(segment.usedFraction);
   const fullLabel = style(theme, "muted", qualifiedLabel);
-  const full = reset
-    ? `${fullLabel}${separator}${fullSignal}${separator}${style(theme, "dim", reset)}`
+  const details = [remaining, reset].filter(Boolean);
+  const full = details.length
+    ? `${fullLabel}${separator}${fullSignal}${details
+        .map((detail) => `${separator}·${separator}${style(theme, "dim", detail)}`)
+        .join("")}`
     : `${fullLabel}${separator}${fullSignal}`;
   return { full, compact, minimal };
 }

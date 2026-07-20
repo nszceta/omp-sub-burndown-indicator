@@ -3,16 +3,16 @@
 A standalone [Oh My Pi](https://omp.sh) extension that renders one segmented subscription-quota row immediately above the interactive editor.
 
 ```text
-Anthropic ▲12pp ahead · OpenAI Codex ▼4pp behind · Google Gemini =0pp on pace
+Anthropic ▲12 points ahead · OpenAI Codex ▼4 points behind · Google Gemini =0 points on pace
 ```
 
-Each segment selects the eligible window with the shortest positive duration across distinct nominal windows. When multiple limits report the same nominal window (such as independent 7d quota buckets), it uses the one furthest behind pace so an unused parallel bucket cannot hide an overused one. The number is the rounded difference, in percentage points (`pp`), between elapsed time and consumed quota:
+Each segment selects the eligible window with the shortest positive duration across distinct nominal windows. When multiple limits report the same nominal window (such as independent 7d quota buckets), it uses the one furthest behind pace so an unused parallel bucket cannot hide an overused one. The number is the rounded difference, in percentage points, between elapsed time and consumed quota:
 
 ```text
 pace delta = elapsed fraction - used fraction
 ```
 
-For example, `▲12pp ahead` means usage is 12 percentage points below the linear consumption pace, so the quota is currently safe. `▼4pp behind` means usage is 4 percentage points over pace. This value is deliberately not the provider's `% used` or `% free`; it measures whether consumption is ahead of or behind schedule. An exhausted quota always renders as exhausted regardless of its calculated delta.
+For example, `▲12 points ahead` means usage is 12 percentage points below the linear consumption pace, so the quota is currently safe. `▼4 points behind` means usage is 4 percentage points over pace. This pace value is deliberately not the provider's `% used` or `% free`; the full form separately displays rounded remaining quota and the reset countdown. An exhausted quota always renders as exhausted regardless of its calculated delta.
 
 Every segment always starts with the provider. The account identifier is omitted when that provider has exactly one account; it is shown only when two or more accounts for the same provider must be distinguished. Email abbreviations use only the local part before `@`, so `hi@adamgradzki.com` becomes `hi`, never a local/domain mixture such as `ha`. A true same-provider label collision uses an explicit ordinal such as `hi@adamgradzki.com#2`.
 
@@ -144,9 +144,9 @@ The public extension API does not expose installed plugin-manager setting values
 
 | State | Unicode full form | ASCII full form | Meaning |
 | --- | --- | --- | --- |
-| Ahead | `▲12pp ahead` | `+12pp ahead` | Usage is 12 percentage points below linear consumption pace |
-| Behind | `▼4pp behind` | `-4pp behind` | Usage is 4 percentage points above linear consumption pace |
-| On pace | `=0pp on pace` | `=0pp on pace` | Within configured tolerance |
+| Ahead | `▲12 points ahead` | `+12 points ahead` | Usage is 12 percentage points below linear consumption pace |
+| Behind | `▼4 points behind` | `-4 points behind` | Usage is 4 percentage points above linear consumption pace |
+| On pace | `=0 points on pace` | `=0 points on pace` | Within configured tolerance |
 | Exhausted | `! exhausted` | `! exhausted` | Used fraction is at least 100% |
 | Unknown | `? unknown` | `? unknown` | No eligible authoritative window |
 | Stale | `~` prefix and `(stale)` suffix | same | Last-good data retained after a transient failure |
@@ -156,13 +156,15 @@ Color is redundant; the glyph remains authoritative in no-color and color-blind 
 Segments are risk-sorted: exhausted, most behind, on pace, least ahead to most ahead, then unknown/stale. A provider with one account renders without an account identifier:
 
 ```text
-Anthropic ▲12pp ahead 2h
+OpenAI Codex ▼61 points behind · 12% left · 6d4h2m
 ```
+
+The full form retains days, hours, and minutes when they are nonzero, and rounds a partial minute up so it never understates the remaining reset time.
 
 When one provider has multiple accounts, width degradation retains both identities:
 
-1. `Anthropic:hi@adamgradzki.com ▲12pp ahead 2h`
-2. `Anthropic:hi ▲12pp`
+1. `Anthropic:hi@adamgradzki.com ▲12 points ahead · 64% left · 2h`
+2. `Anthropic:hi ▲12 points`
 3. `An:h▲12`
 4. urgent segments plus `+N` hidden count
 
