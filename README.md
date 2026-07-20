@@ -3,7 +3,7 @@
 A standalone [Oh My Pi](https://omp.sh) extension that renders one segmented subscription-quota row immediately above the interactive editor.
 
 ```text
-Anthropic ▲12 points ahead · OpenAI Codex ▼4 points behind · Google Gemini =0 points on pace
+Anthropic ▲12pp · OpenAI Codex ▼4pp · Google Gemini =0pp
 ```
 
 Each segment selects the eligible window with the shortest positive duration across distinct nominal windows. When multiple limits report the same nominal window (such as independent 7d quota buckets), it uses the one furthest behind pace so an unused parallel bucket cannot hide an overused one. The number is the rounded difference, in percentage points, between elapsed time and consumed quota:
@@ -12,7 +12,7 @@ Each segment selects the eligible window with the shortest positive duration acr
 pace delta = elapsed fraction - used fraction
 ```
 
-For example, `▲12 points ahead` means usage is 12 percentage points below the linear consumption pace, so the quota is currently safe. `▼4 points behind` means usage is 4 percentage points over pace. This pace value is deliberately not the provider's `% used` or `% free`; the full form separately displays rounded remaining quota and the reset countdown. An exhausted quota always renders as exhausted regardless of its calculated delta.
+For example, `▲12pp` means usage is 12 percentage points below the linear consumption pace, so the quota is currently safe. `▼4pp` means usage is 4 percentage points over pace. This pace value is deliberately not the provider's `% used` or `% free`; the full form separately displays rounded remaining quota and the reset countdown. An exhausted quota always renders as exhausted regardless of its calculated delta.
 
 Every segment always starts with the provider. The account identifier is omitted when that provider has exactly one account; it is shown only when two or more accounts for the same provider must be distinguished. Email abbreviations use only the local part before `@`, so `hi@adamgradzki.com` becomes `hi`, never a local/domain mixture such as `ha`. A true same-provider label collision uses an explicit ordinal such as `hi@adamgradzki.com#2`.
 
@@ -149,7 +149,16 @@ A direct report must expose a stable account, project, organization, or explicit
 | `OMP_SUB_BURNDOWN_SYMBOLS` | `auto` | `auto`, `unicode`, or `ascii` |
 | `OMP_SUB_BURNDOWN_SHOW_RESET` | `true` | `true` or `false` |
 
-The public extension API does not expose installed plugin-manager setting values, so configuration is environment-only. Numeric and enum values are validated before I/O.
+The environment variables in this table remain the configuration surface for refresh, source/transport, and other runtime and rendering options. Numeric and enum values are validated before I/O.
+
+Display density is a separate OMP plugin setting and has no environment-variable setting. Compact/dense output is the default and is user-wide by default; OMP project overrides may take precedence when configured. To restore verbose text, set the plugin setting with OMP:
+
+```sh
+omp plugin config set omp-sub-burndown-indicator density text
+```
+
+With the default compact output, `▼4 points behind` becomes `▼4pp`, retaining the direction glyph. The text setting restores `▼4 points behind`; ahead and on-pace signals likewise use `▲12pp` and `=0pp` in compact output or their full text forms when text is selected. Exhausted and unknown behavior, along with existing width fallback forms, is unchanged.
+
 
 ## Symbols and ordering
 
@@ -162,19 +171,21 @@ The public extension API does not expose installed plugin-manager setting values
 | Unknown | `? unknown` | `? unknown` | No eligible authoritative window |
 | Stale | `~` prefix and `(stale)` suffix | same | Last-good data retained after a transient failure |
 
+The table shows verbose full forms. The default compact rendering shortens only full-form pace rows to glyph + magnitude + `pp` (`▲12pp`, `▼4pp`, `=0pp`); setting `density text` restores the table's verbose pace text. Exhausted and unknown forms are unchanged, and existing width fallback forms remain as documented below.
+
 Color is redundant; the glyph remains authoritative in no-color and color-blind terminals. OMP theme colors are used rather than hard-coded ANSI colors.
 
 Segments are risk-sorted: exhausted, most behind, on pace, least ahead to most ahead, then unknown/stale. A provider with one account renders without an account identifier:
 
 ```text
-OpenAI Codex ▼61 points behind · 12% left · 6d4h2m
+OpenAI Codex ▼61pp · 12% left · 6d4h2m
 ```
 
 The full form retains days, hours, and minutes when they are nonzero, and rounds a partial minute up so it never understates the remaining reset time.
 
 When one provider has multiple accounts, width degradation retains both identities:
 
-1. `Anthropic:hi@adamgradzki.com ▲12 points ahead · 64% left · 2h`
+1. `Anthropic:hi@adamgradzki.com ▲12pp · 64% left · 2h`
 2. `Anthropic:hi ▲12 points`
 3. `An:h▲12`
 4. urgent segments plus `+N` hidden count

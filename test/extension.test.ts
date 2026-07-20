@@ -13,6 +13,7 @@ function fakeContext(hasUI: boolean) {
   const notifications: string[] = [];
   const model = { provider: "anthropic", id: "claude" };
   const ctx = {
+    cwd: process.cwd(),
     hasUI,
     model,
     models: {

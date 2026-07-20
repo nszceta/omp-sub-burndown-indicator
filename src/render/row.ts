@@ -1,5 +1,6 @@
 import { visibleWidth } from "@oh-my-pi/pi-tui";
 import type { BurndownSegment, SegmentState } from "../domain/types";
+import type { DensityMode } from "../config";
 import { buildStableLabels, labelFor, providerLabelFor, type StableLabels } from "./labels";
 import {
   type BurndownSymbols,
@@ -17,6 +18,7 @@ export interface BurndownTheme {
 export interface BurndownRenderOptions {
   theme?: BurndownTheme;
   symbols?: SymbolMode | BurndownSymbols;
+  density?: DensityMode;
   showReset?: boolean;
   now?: number | (() => number);
   separator?: string;
@@ -114,12 +116,13 @@ function formsFor(
   segment: BurndownSegment,
   labels: StableLabels,
   symbols: BurndownSymbols,
+  density: DensityMode,
   showReset: boolean,
   now: number,
   theme: BurndownTheme | undefined,
 ): RenderedForms {
   const color = colorFor(segment);
-  const fullSignal = style(theme, color, describeSegmentSignal(segment, symbols));
+  const fullSignal = style(theme, color, describeSegmentSignal(segment, symbols, density));
   const compactSignal = style(theme, color, segmentSignalWithUnit(segment, symbols));
   const minimalSignal = style(theme, color, segmentSignal(segment, symbols));
   const separator = " ";
@@ -205,7 +208,15 @@ export function renderBurndownRow(
   const labels = buildStableLabels(sorted);
   const renderNow = nowValue(options.now);
   const forms = sorted.map((segment) =>
-    formsFor(segment, labels, symbols, options.showReset ?? true, renderNow, options.theme),
+    formsFor(
+      segment,
+      labels,
+      symbols,
+      options.density ?? "dense",
+      options.showReset ?? true,
+      renderNow,
+      options.theme,
+    ),
   );
   for (let count = sorted.length; count >= 1; count--) {
     const hidden = sorted.length - count;

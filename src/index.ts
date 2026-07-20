@@ -1,5 +1,12 @@
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
+import { getPluginSettings } from "@oh-my-pi/pi-coding-agent/extensibility/plugins";
 import { IndicatorController } from "./runtime/controller.ts";
+
+const PLUGIN_NAME = "omp-sub-burndown-indicator";
+
+async function pluginSettings(ctx: { cwd: string }): Promise<Readonly<Record<string, unknown>>> {
+  return getPluginSettings(PLUGIN_NAME, ctx.cwd);
+}
 
 export { IndicatorController, WIDGET_KEY } from "./runtime/controller.ts";
 
@@ -7,13 +14,13 @@ export default function subscriptionBurndownExtension(pi: ExtensionAPI): void {
   const controller = new IndicatorController();
 
   pi.on("session_start", async (_event, ctx) => {
-    await controller.start(ctx);
+    await controller.start(ctx, await pluginSettings(ctx));
   });
   pi.on("session_switch", async (_event, ctx) => {
-    await controller.restart(ctx);
+    await controller.restart(ctx, await pluginSettings(ctx));
   });
   pi.on("session_tree", async (_event, ctx) => {
-    await controller.restart(ctx);
+    await controller.restart(ctx, await pluginSettings(ctx));
   });
   pi.on("session_shutdown", (_event, ctx) => {
     controller.shutdown(ctx);

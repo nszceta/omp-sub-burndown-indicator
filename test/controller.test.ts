@@ -15,6 +15,7 @@ const config: BurndownConfig = {
   timeoutMs: 1_000,
   paceTolerance: 0.01,
   symbols: "ascii",
+  density: "dense",
   showReset: false,
   clockSkewMs: 0,
 };
@@ -108,6 +109,33 @@ test("controller installs one above-editor width-aware row and clears on shutdow
   expect(visibleWidth(rows[0] ?? "")).toBeLessThanOrEqual(9);
   controller.shutdown(ctx);
   expect(state.cleared).toBe(true);
+});
+
+test("controller propagates plugin density into the row component", async () => {
+  const state: FakeUiState = { cleared: false, renders: 0 };
+  const ctx = fakeContext(state);
+  const controller = new IndicatorController({
+    now: () => now,
+    sources: [staticSource([snapshot()])],
+  });
+  await controller.start(ctx, { density: "text" });
+
+  const component = (
+    state.content as (
+      tui: { requestRender(): void },
+      theme: { fg(_color: string, text: string): string },
+    ) => { render(width: number): readonly string[] }
+  )({ requestRender: () => state.renders++ }, { fg: (_color, text) => text });
+  expect(component.render(100).join("")).toContain("points ahead");
+  await controller.restart(ctx, { density: "dense" });
+  const denseComponent = (
+    state.content as (
+      tui: { requestRender(): void },
+      theme: { fg(_color: string, text: string): string },
+    ) => { render(width: number): readonly string[] }
+  )({ requestRender: () => state.renders++ }, { fg: (_color, text) => text });
+  expect(denseComponent.render(100).join("")).toContain("▲25pp");
+  controller.shutdown(ctx);
 });
 
 test("headless startup performs no source work or widget calls", async () => {

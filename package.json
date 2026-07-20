@@ -1,6 +1,6 @@
 {
   "name": "omp-sub-burndown-indicator",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "One-line subscription quota burndown indicator for Oh My Pi",
   "type": "module",
   "license": "MIT",
@@ -20,7 +20,15 @@
   "omp": {
     "extensions": [
       "./src/index.ts"
-    ]
+    ],
+    "settings": {
+      "density": {
+        "type": "enum",
+        "description": "Pace signal density",
+        "values": ["dense", "text"],
+        "default": "dense"
+      }
+    }
   },
   "dependencies": {
     "@oh-my-pi/pi-ai": "^16.4.0",

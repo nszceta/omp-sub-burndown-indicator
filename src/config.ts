@@ -1,4 +1,5 @@
 export type SymbolMode = "auto" | "unicode" | "ascii";
+export type DensityMode = "dense" | "text";
 
 export interface BurndownConfig {
   broker?: { url: string; token: string };
@@ -8,8 +9,18 @@ export interface BurndownConfig {
   timeoutMs: number;
   paceTolerance: number;
   symbols: SymbolMode;
+  density: DensityMode;
   showReset: boolean;
   clockSkewMs: number;
+}
+
+function densityValue(pluginSettings: Readonly<Record<string, unknown>>): DensityMode {
+  const configured = pluginSettings.density;
+  if (configured === undefined) return "dense";
+  if (configured !== "dense" && configured !== "text") {
+    throw new Error("density must be dense or text");
+  }
+  return configured;
 }
 
 const DEFAULTS = {
@@ -48,7 +59,10 @@ function booleanValue(
   throw new Error(`${name} must be true or false`);
 }
 
-export function readConfig(env: Record<string, string | undefined> = process.env): BurndownConfig {
+export function readConfig(
+  env: Record<string, string | undefined> = process.env,
+  pluginSettings: Readonly<Record<string, unknown>> = {},
+): BurndownConfig {
   const brokerUrl = env.OMP_AUTH_BROKER_URL?.trim() ?? env.OMP_SUB_BURNDOWN_BROKER_URL?.trim();
   const brokerToken =
     env.OMP_AUTH_BROKER_TOKEN?.trim() ?? env.OMP_SUB_BURNDOWN_BROKER_TOKEN?.trim();
@@ -57,6 +71,7 @@ export function readConfig(env: Record<string, string | undefined> = process.env
     throw new Error("OMP_SUB_BURNDOWN_SYMBOLS must be auto, unicode, or ascii");
   }
 
+  const density = densityValue(pluginSettings);
   const refreshSeconds = boundedNumber(
     env,
     "OMP_SUB_BURNDOWN_REFRESH_SECONDS",
@@ -99,6 +114,7 @@ export function readConfig(env: Record<string, string | undefined> = process.env
     timeoutMs: timeoutSeconds * 1_000,
     paceTolerance: tolerancePercent / 100,
     symbols,
+    density,
     showReset: booleanValue(env, "OMP_SUB_BURNDOWN_SHOW_RESET", true),
     clockSkewMs: clockSkewSeconds * 1_000,
   };

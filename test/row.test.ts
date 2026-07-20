@@ -36,9 +36,9 @@ describe("burndown row", () => {
       resetsAt: now + 6 * 24 * 60 * 60_000 + 4 * 60 * 60_000 + 60_001,
       usedFraction: 0.88,
     });
-    expect(renderBurndownRow([value], 200, { now, theme: identityTheme })).toEqual([
-      "Provider ▼61 points behind · 12% left · 6d4h2m",
-    ]);
+    expect(
+      renderBurndownRow([value], 200, { now, theme: identityTheme, density: "text" }),
+    ).toEqual(["Provider ▼61 points behind · 12% left · 6d4h2m"]);
   });
 
   test("renders every state and both symbol modes", () => {
@@ -50,9 +50,14 @@ describe("burndown row", () => {
       segment("e", "unknown"),
       segment("f", "ahead", 0.1, { stale: true }),
     ];
-    const unicode = renderBurndownRow(segments, 200, { now, theme: identityTheme }).join("");
+    const unicode = renderBurndownRow(segments, 200, {
+      now,
+      density: "text",
+      theme: identityTheme,
+    }).join("");
     const ascii = renderBurndownRow(segments, 200, {
       now,
+      density: "text",
       symbols: "ascii",
       theme: identityTheme,
     }).join("");
@@ -64,6 +69,36 @@ describe("burndown row", () => {
     expect(unicode).toContain("~▲10 points ahead (stale)");
     expect(ascii).toContain("+12 points ahead");
     expect(ascii).toContain("-4 points behind");
+  });
+
+  test("uses dense pace signals in full forms by default", () => {
+    const segments = [
+      segment("a", "ahead", 0.12),
+      segment("b", "behind", -0.04),
+      segment("c", "on-pace", 0),
+      segment("d", "exhausted", 0),
+      segment("e", "unknown"),
+      segment("f", "ahead", 0.1, { stale: true }),
+    ];
+    const unicode = renderBurndownRow(segments, 200, {
+      now,
+      theme: identityTheme,
+    }).join("");
+    const ascii = renderBurndownRow(segments, 200, {
+      now,
+      symbols: "ascii",
+      theme: identityTheme,
+    }).join("");
+    expect(unicode).toContain("▲12pp");
+    expect(unicode).toContain("▼4pp");
+    expect(unicode).toContain("=0pp");
+    expect(unicode).toContain("! exhausted");
+    expect(unicode).toContain("? unknown");
+    expect(unicode).toContain("~▲10pp (stale)");
+    expect(unicode).not.toContain("points ahead");
+    expect(unicode).not.toContain("points behind");
+    expect(ascii).toContain("+12pp");
+    expect(ascii).toContain("-4pp");
   });
 
   test("fits exact visible width and emits no line when no signal fits", () => {
@@ -112,6 +147,7 @@ describe("burndown row", () => {
 
     const full = renderBurndownRow(values, 100, {
       now,
+      density: "text",
       showReset: false,
       theme: identityTheme,
     }).join("");
@@ -145,6 +181,7 @@ describe("burndown row", () => {
     const full = renderBurndownRow(values, 100, {
       now,
       showReset: false,
+      density: "text",
       theme: identityTheme,
     }).join("");
     expect(full).toContain("Anthropic:hi@adamgradzki.com ▲10 points ahead");

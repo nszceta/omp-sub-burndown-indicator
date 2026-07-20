@@ -33,6 +33,8 @@ export interface IndicatorControllerOptions {
   env?: Record<string, string | undefined>;
   /** Validated configuration override. */
   config?: BurndownConfig;
+  /** User/project plugin settings fetched for the active session context. */
+  pluginSettings?: Readonly<Record<string, unknown>>;
   /** Clock injection for deterministic refresh/render tests. */
   now?: () => number;
 }
@@ -87,24 +89,30 @@ export class IndicatorController {
   }
 
   /** Start the current session. Repeated calls join the existing poller. */
-  async start(ctx: ExtensionContext): Promise<void> {
+  async start(
+    ctx: ExtensionContext,
+    pluginSettings?: Readonly<Record<string, unknown>>,
+  ): Promise<void> {
     if (this.#disposed || !ctx.hasUI) return;
     if (this.#loop?.active && this.#ctx === ctx) {
       this.#setDiscoveredProviders(ctx);
       await this.#loop.trigger();
       return;
     }
-    await this.#activate(ctx);
+    await this.#activate(ctx, pluginSettings);
   }
 
   /** Abort the prior session generation and start exactly one new poller. */
-  async restart(ctx: ExtensionContext): Promise<void> {
+  async restart(
+    ctx: ExtensionContext,
+    pluginSettings?: Readonly<Record<string, unknown>>,
+  ): Promise<void> {
     if (this.#disposed || !ctx.hasUI) {
       this.#stopWork();
       return;
     }
     this.#stopWork();
-    await this.#activate(ctx);
+    await this.#activate(ctx, pluginSettings);
   }
 
   /** Permanently shut down this controller and clear the widget. */
@@ -200,13 +208,18 @@ export class IndicatorController {
     ].join("\n");
   }
 
-  async #activate(ctx: ExtensionContext): Promise<void> {
+  async #activate(
+    ctx: ExtensionContext,
+    pluginSettings?: Readonly<Record<string, unknown>>,
+  ): Promise<void> {
     if (this.#disposed || !ctx.hasUI) return;
     this.#ctx = ctx;
     const generation = ++this.#generation;
     this.#configError = undefined;
     try {
-      this.#config = this.#options.config ?? readConfig(this.#options.env);
+      this.#config =
+        this.#options.config ??
+        readConfig(this.#options.env, pluginSettings ?? this.#options.pluginSettings);
     } catch (error) {
       this.#configError = errorText(error);
       this.#config = this.#options.config ?? readConfig({});
@@ -278,6 +291,7 @@ export class IndicatorController {
           if (!this.#component) {
             this.#component = new BurndownRowComponent(theme as never, {
               symbols: this.#config?.symbols ?? "auto",
+              density: this.#config?.density ?? "dense",
               showReset: this.#config?.showReset ?? true,
             });
             this.#component.setSegments(this.#lastSegments);
@@ -357,6 +371,8 @@ export class IndicatorController {
         // Ignore redraw failures during lifecycle teardown.
       }
     }
+    this.#component = undefined;
+    this.#tui = undefined;
   }
 }
 

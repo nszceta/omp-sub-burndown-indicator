@@ -7,6 +7,7 @@ describe("readConfig", () => {
     expect(config.broker).toBeUndefined();
     expect(config.refreshMs).toBe(300_000);
     expect(config.paceTolerance).toBe(0.01);
+    expect(config.density).toBe("dense");
   });
 
   test("half configured broker reports a diagnostic without exposing token", () => {
@@ -16,13 +17,15 @@ describe("readConfig", () => {
     expect(config.brokerError).not.toContain("secret-value");
   });
 
-  test("validates numeric, enum, boolean, and URL values", () => {
+  test("validates numeric, enum, boolean, URL, and plugin density values", () => {
     expect(() => readConfig({ OMP_SUB_BURNDOWN_REFRESH_SECONDS: "29" })).toThrow();
     expect(() => readConfig({ OMP_SUB_BURNDOWN_SYMBOLS: "emoji" })).toThrow();
     expect(() => readConfig({ OMP_SUB_BURNDOWN_SHOW_RESET: "yes" })).toThrow();
     expect(() =>
       readConfig({ OMP_AUTH_BROKER_URL: "file:///tmp/x", OMP_AUTH_BROKER_TOKEN: "x" }),
     ).toThrow();
+    expect(readConfig({}, { density: "text" }).density).toBe("text");
+    expect(() => readConfig({}, { density: "normal" })).toThrow("density");
   });
 });
 

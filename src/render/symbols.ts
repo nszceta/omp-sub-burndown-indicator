@@ -1,4 +1,7 @@
 import type { BurndownSegment, SegmentState } from "../domain/types";
+import type { DensityMode } from "../config";
+
+export type { DensityMode } from "../config";
 
 export type SymbolMode = "auto" | "unicode" | "ascii";
 
@@ -61,23 +64,39 @@ export function segmentSignal(
   return `${stale}${symbolForState(segment.state, symbols)}${magnitude}`;
 }
 
+/** Add the requested pace-point unit while preserving state glyphs. */
+export function segmentSignalWithDensity(
+  segment: Pick<BurndownSegment, "state" | "paceDelta" | "stale">,
+  symbols: BurndownSymbols,
+  density: DensityMode = "dense",
+): string {
+  const signal = segmentSignal(segment, symbols);
+  if (segment.state !== "ahead" && segment.state !== "behind" && segment.state !== "on-pace") {
+    return signal;
+  }
+  return density === "dense" ? `${signal}pp` : `${signal} points`;
+}
+
 /** Add the fully spelled-out pace-point unit while preserving state glyphs. */
 export function segmentSignalWithUnit(
   segment: Pick<BurndownSegment, "state" | "paceDelta" | "stale">,
   symbols: BurndownSymbols,
 ): string {
-  const signal = segmentSignal(segment, symbols);
-  return segment.state === "ahead" || segment.state === "behind" || segment.state === "on-pace"
-    ? `${signal} points`
-    : signal;
+  return segmentSignalWithDensity(segment, symbols, "text");
 }
 
 /** Spell out what a pace delta means for the full-width indicator form. */
 export function describeSegmentSignal(
   segment: Pick<BurndownSegment, "state" | "paceDelta" | "stale">,
   symbols: BurndownSymbols,
+  density: DensityMode = "dense",
 ): string {
-  const signal = segmentSignalWithUnit(segment, symbols);
+  const signal = segmentSignalWithDensity(segment, symbols, density);
+  const isPaceState =
+    segment.state === "ahead" || segment.state === "behind" || segment.state === "on-pace";
+  if (density === "dense" && isPaceState) {
+    return `${signal}${segment.stale ? " (stale)" : ""}`;
+  }
   const meaning =
     segment.state === "ahead"
       ? "ahead"
