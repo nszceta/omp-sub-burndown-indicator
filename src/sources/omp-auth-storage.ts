@@ -72,11 +72,7 @@ export class OmpAuthStorageUsageSource implements UsageSource {
       now: this.#now(),
       staleAfterMs: this.#staleAfterMs,
     });
-    this.#detail =
-      normalized.diagnostics.length > 0
-        ? `${normalized.diagnostics.length} usage report(s) omitted because identity was ambiguous`
-        : undefined;
-    return normalized.snapshots
+    const snapshots = normalized.snapshots
       .map((snapshot) => ({
         ...snapshot,
         limits: snapshot.limits.filter(
@@ -84,5 +80,43 @@ export class OmpAuthStorageUsageSource implements UsageSource {
         ),
       }))
       .filter((snapshot) => snapshot.limits.length > 0);
+    const ambiguous = normalized.diagnostics.filter(
+      (entry) => entry.reason === "ambiguous-identity",
+    );
+    const placeholders = unattributedPlaceholders(
+      ambiguous.map((entry) => entry.provider),
+      snapshots,
+      this.id,
+    );
+    this.#detail =
+      ambiguous.length > 0
+        ? `${ambiguous.length} usage report(s) cannot be attributed to a stable account${
+            placeholders.length > 0
+              ? `; ${placeholders.map((snapshot) => snapshot.provider).join(", ")} shown as unknown`
+              : ""
+          }`
+        : undefined;
+    return [...snapshots, ...placeholders];
   }
+}
+
+/**
+ * Surface one provisional provider-level placeholder per provider whose reports
+ * were all dropped as unattributable. The placeholder carries no measurements,
+ * so it renders as `? unknown` and never assigns usage across accounts; a later
+ * identified report or provisional header snapshot replaces it by stable ID.
+ */
+function unattributedPlaceholders(
+  ambiguousProviders: readonly string[],
+  snapshots: readonly SubscriptionSnapshot[],
+  identitySource: SubscriptionSnapshot["identitySource"],
+): SubscriptionSnapshot[] {
+  const reported = new Set(snapshots.map((snapshot) => snapshot.provider));
+  const hidden = [
+    ...new Set(ambiguousProviders.filter((provider) => !reported.has(provider))),
+  ].sort();
+  return hidden.map((provider) => {
+    const id = `provider:${provider}`;
+    return { id, provider, accountId: id, identitySource, limits: [] };
+  });
 }

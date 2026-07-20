@@ -85,6 +85,8 @@ Independent quota tiers are separate subscriptions under their stable base accou
 
 The extension calls the public `ctx.modelRegistry.authStorage.fetchUsageReports()` API—the same normalized, cached report path used by OMP's built-in `/usage` command. No duplicate credentials or broker configuration are required. Account IDs and email labels come from OMP's normalized report metadata; credential values are never returned to the extension.
 
+A single report without account scope keeps the provisional `provider:<provider>` identity described below. When OMP returns several reports for one provider with no stable account identity—for example, multiple API-key credentials stored without account scope, as with OpenCode Go—usage cannot be attributed to a particular account. The provider then renders as one `Provider ? unknown` segment instead of being hidden, so the indicator never silently shows fewer subscriptions than `/usage`; `/burndown-status` reports how many reports were unattributable. The placeholder carries no measurements and is replaced as soon as an identified report or provisional header snapshot exists for the provider.
+
 ### 2. OMP auth broker or gateway
 
 Configure the documented broker environment variables:
@@ -137,6 +139,7 @@ The initial matrix intentionally excludes public modules that do not provide an 
 
 - MiniMax currently returns no usage report from its public adapter.
 - OpenCode Go derives spend from local observed request costs rather than an upstream subscription window.
+- xAI OAuth (Grok) exposes no subscription-window usage API; its rate-limit headers are static tier caps without reset data, so no authoritative window can be derived.
 - Ollama usage is not a subscription-window quota source.
 - Codex reset-credit data is not a usage window and is ignored.
 
@@ -241,7 +244,7 @@ Exact placement is guaranteed only in interactive OMP.
 
 OMP's public extension context exposes the model registry's normalized auth usage reports. This is the default source and matches the data used by `/usage`. Broker data, explicit endpoint credentials, and complete response headers remain fallbacks or supplemental measurements.
 
-Providers without an OMP usage adapter or a complete upstream quota window remain unavailable. Response-only data identifies the active provider, not a particular account, so it is accepted only while that provider is unambiguous. The extension does not inspect credential values, estimate quota, or assign anonymous data across multiple accounts.
+Providers without an OMP usage adapter or a complete upstream quota window remain unavailable. Response-only data identifies the active provider, not a particular account, so it is accepted only while that provider is unambiguous. The extension does not inspect credential values, estimate quota, or assign anonymous data across multiple accounts; providers whose reports cannot be attributed to any account are shown as `? unknown` rather than hidden.
 
 ## Troubleshooting
 
