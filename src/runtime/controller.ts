@@ -187,6 +187,7 @@ export class IndicatorController {
       const flags = [source.enabled ? "enabled" : "disabled"];
       if (source.lastSuccessAt !== undefined) flags.push(`last-success=${source.lastSuccessAt}`);
       if (source.lastErrorCategory) flags.push(`error=${source.lastErrorCategory}`);
+      if (source.detail) flags.push(`detail=${source.detail}`);
       return `${source.sourceId}: ${flags.join(", ")}`;
     });
     const discovered =
