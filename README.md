@@ -30,11 +30,22 @@ This project is not published to the npm registry. npm removed TOTP as a
 supported 2FA method, and its passkey-based replacement is incompatible with
 the maintainer's password manager.
 
-Install directly from GitHub instead:
+Install through its GitHub-hosted OMP marketplace:
 
 ```sh
-omp plugin install https://github.com/nszceta/omp-sub-burndown-indicator.git
+omp plugin marketplace add https://github.com/nszceta/omp-sub-burndown-indicator.git
+omp plugin install omp-sub-burndown-indicator@nszceta
+omp config set marketplace.autoUpdate auto
 ```
+
+OMP checks stale marketplace catalogs on startup and installs newer catalog versions when `marketplace.autoUpdate` is `auto`. To fetch and install a release immediately:
+
+```sh
+omp plugin marketplace update nszceta
+omp plugin upgrade omp-sub-burndown-indicator@nszceta
+```
+
+For each release, bump both `package.json` and `.omp-plugin/marketplace.json` to the same version before pushing. OMP compares the catalog version when deciding whether to update; a GitHub Release or tag is optional and does not trigger the update.
 
 Alternatively, install from a local checkout:
 

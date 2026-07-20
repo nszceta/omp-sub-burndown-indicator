@@ -1,0 +1,22 @@
+{
+  "name": "nszceta",
+  "owner": {
+    "name": "nszceta"
+  },
+  "metadata": {
+    "description": "OMP plugins maintained by nszceta"
+  },
+  "plugins": [
+    {
+      "name": "omp-sub-burndown-indicator",
+      "description": "One-line subscription quota burndown indicator for Oh My Pi",
+      "version": "0.2.0",
+      "source": {
+        "source": "github",
+        "repo": "nszceta/omp-sub-burndown-indicator"
+      },
+      "repository": "https://github.com/nszceta/omp-sub-burndown-indicator",
+      "license": "MIT"
+    }
+  ]
+}
