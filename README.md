@@ -1,20 +1,24 @@
 # OMP Subscription Burndown Indicator
 
-A standalone [Oh My Pi](https://omp.sh) extension that renders a segmented subscription-quota indicator immediately above the interactive editor. When segments exceed the available width, complete segments continue on subsequent indicator lines rather than being split.
+Keep an eye on your AI subscription allowances while you work. This standalone [Oh My Pi](https://omp.sh) extension places a compact status line immediately above the interactive editor, so you can see whether each provider's quota is being consumed sustainably before it resets. Complete segments wrap onto later indicator lines when space runs out; they are never split.
 
 ```text
 Anthropic ▲12pp · OpenAI Codex ▼4pp · Google Gemini =0pp
 ```
 
-Each segment selects the eligible window with the shortest positive duration across distinct nominal windows. When multiple limits report the same nominal window (such as independent 7d quota buckets), it uses the one furthest behind pace so an unused parallel bucket cannot hide an overused one. The number is the rounded difference, in percentage points, between elapsed time and consumed quota:
+At a glance, a segment shows whether usage is ahead of or behind a steady consumption pace for its reset window. The number is the rounded difference, in percentage points, between elapsed time and consumed quota:
 
 ```text
 pace delta = elapsed fraction - used fraction
 ```
 
-For example, `▲12pp` means usage is 12 percentage points below the linear consumption pace, so the quota is currently safe. `▼4pp` means usage is 4 percentage points over pace. This pace value is deliberately not the provider's `% used` or `% free`; the full form separately displays rounded remaining quota and the reset countdown. An exhausted quota always renders as exhausted regardless of its calculated delta.
+`▲12pp` means usage is 12 percentage points below the linear consumption pace, so the quota is currently safe; `▼4pp` means it is 4 percentage points over pace. This is deliberately not the provider's `% used` or `% free`: the full form separately shows rounded remaining quota and the reset countdown. An exhausted quota always renders as exhausted regardless of its calculated delta.
 
-Every segment always starts with the complete provider brand. The account identifier is omitted when that provider has exactly one account; it is shown only when two or more accounts for the same provider must be distinguished. Required account labels remain complete, including their full email or account text. A true same-provider label collision uses an explicit ordinal such as `hi@adamgradzki.com#2`.
+Every segment starts with the complete provider brand. The account identifier is omitted when that provider has exactly one account; it is shown only when two or more accounts for the same provider must be distinguished. Required account labels remain complete, including their full email or account text. A true same-provider label collision uses an explicit ordinal such as `hi@adamgradzki.com#2`.
+
+## How quota windows are selected
+
+For each subscription, the extension selects the eligible reported window with the shortest positive duration across distinct nominal windows. If multiple limits report the same nominal window—such as independent 7-day quota buckets—it chooses the one furthest behind pace, so an unused parallel bucket cannot hide an overused one.
 
 ## Requirements
 
