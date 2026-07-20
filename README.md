@@ -151,10 +151,19 @@ A direct report must expose a stable account, project, organization, or explicit
 
 The environment variables in this table remain the configuration surface for refresh, source/transport, and other runtime and rendering options. Numeric and enum values are validated before I/O.
 
-Display density is a separate OMP plugin setting and has no environment-variable setting. Compact/dense output is the default and is user-wide by default; OMP project overrides may take precedence when configured. To restore verbose text, set the plugin setting with OMP:
+Display density is stored only in OMP's user-wide plugin runtime configuration
+(normally `~/.omp/plugins/omp-plugins.lock.json`), never in an environment
+variable. Compact/dense output is the default. OMP's `plugin config` command
+does not currently address marketplace installs; to restore verbose text, add
+the following entry to the runtime configuration file's existing `settings`
+object, then restart OMP:
 
-```sh
-omp plugin config set omp-sub-burndown-indicator density text
+```json
+{
+  "omp-sub-burndown-indicator": {
+    "density": "text"
+  }
+}
 ```
 
 With the default compact output, `▼4 points behind` becomes `▼4pp`, retaining the direction glyph. The text setting restores `▼4 points behind`; ahead and on-pace signals likewise use `▲12pp` and `=0pp` in compact output or their full text forms when text is selected. Exhausted and unknown behavior, along with existing width fallback forms, is unchanged.
