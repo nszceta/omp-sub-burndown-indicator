@@ -13,22 +13,27 @@ const PROVIDER_DISPLAY_NAMES: Readonly<Record<string, string>> = {
 };
 
 /** Turn a provider identifier into a stable, human-readable brand name. */
-export function providerDisplayName(provider: string): string {
+export function providerDisplayName(provider: string, tier?: string): string {
   const normalized = provider.trim().toLocaleLowerCase();
   const known = PROVIDER_DISPLAY_NAMES[normalized];
-  if (known) return known;
-  return (
-    normalized
-      .split(/[-_\s]+/u)
-      .filter(Boolean)
-      .map((word) => `${word[0]?.toLocaleUpperCase() ?? ""}${word.slice(1)}`)
-      .join(" ") || "Unknown"
-  );
+  const display = known ?? (titleCaseWords(normalized) || "Unknown");
+  const normalizedTier = clean(tier).toLocaleLowerCase();
+  return normalizedTier ? `${display} ${titleCaseWords(normalizedTier)}` : display;
+}
+
+function titleCaseWords(value: string): string {
+  return value
+    .split(/[-_\s]+/u)
+    .filter(Boolean)
+    .map((word) => `${word[0]?.toLocaleUpperCase() ?? ""}${word.slice(1)}`)
+    .join(" ");
 }
 
 /** A segment-shaped value accepted by the renderer's label allocator. */
 export type LabelSegment = Pick<BurndownSegment, "subscriptionId" | "provider" | "label"> & {
+  accountId?: string;
   accountLabel?: string;
+  tier?: string;
 };
 
 export interface StableLabels {
@@ -53,25 +58,40 @@ function displayName(segment: LabelSegment): string {
  */
 export function buildStableLabels(segments: readonly LabelSegment[]): StableLabels {
   const ordered = [...segments].sort((a, b) => a.subscriptionId.localeCompare(b.subscriptionId));
-  const providerCounts = new Map<string, number>();
+  const providerAccounts = new Map<string, Set<string>>();
   for (const segment of ordered) {
-    providerCounts.set(segment.provider, (providerCounts.get(segment.provider) ?? 0) + 1);
+    const provider = clean(segment.provider).toLocaleLowerCase();
+    let accounts = providerAccounts.get(provider);
+    if (!accounts) {
+      accounts = new Set<string>();
+      providerAccounts.set(provider, accounts);
+    }
+    accounts.add(clean(segment.accountId) || segment.subscriptionId);
   }
-  const fullCounts = new Map<string, number>();
+  const fullGroups = new Map<string, Map<string, number>>();
   const full = new Map<string, string>();
   const providerFull = new Map<string, string>();
   const accountRequired = new Set<string>();
 
   for (const segment of ordered) {
     const name = displayName(segment);
-    const provider = providerDisplayName(segment.provider);
-    if ((providerCounts.get(segment.provider) ?? 0) > 1) {
+    const providerKey = clean(segment.provider).toLocaleLowerCase();
+    const accountKey = clean(segment.accountId) || segment.subscriptionId;
+    const provider = providerDisplayName(segment.provider, segment.tier);
+    if ((providerAccounts.get(providerKey)?.size ?? 0) > 1) {
       accountRequired.add(segment.subscriptionId);
     }
-    const collisionScope = `${segment.provider}\0`;
-    const fullKey = `${collisionScope}${name}`;
-    const fullNumber = (fullCounts.get(fullKey) ?? 0) + 1;
-    fullCounts.set(fullKey, fullNumber);
+    const collisionScope = `${providerKey}\0${name}`;
+    let groups = fullGroups.get(collisionScope);
+    if (!groups) {
+      groups = new Map<string, number>();
+      fullGroups.set(collisionScope, groups);
+    }
+    let fullNumber = groups.get(accountKey);
+    if (fullNumber === undefined) {
+      fullNumber = groups.size + 1;
+      groups.set(accountKey, fullNumber);
+    }
 
     full.set(segment.subscriptionId, fullNumber === 1 ? name : `${name}#${fullNumber}`);
     providerFull.set(segment.subscriptionId, provider);

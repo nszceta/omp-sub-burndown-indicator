@@ -2,10 +2,14 @@ import { describe, expect, test } from "bun:test";
 import type { UsageLimit, UsageReport } from "@oh-my-pi/pi-ai";
 import { normalizeUsageReport, normalizeUsageReports } from "../src/domain/normalize.ts";
 
-const limit = (id: string, accountId?: string): UsageLimit => ({
+const limit = (id: string, accountId?: string, tier?: string): UsageLimit => ({
   id,
   label: id,
-  scope: { provider: "anthropic", ...(accountId ? { accountId } : {}) },
+  scope: {
+    provider: "anthropic",
+    ...(accountId ? { accountId } : {}),
+    ...(tier !== undefined ? { tier } : {}),
+  },
   window: { id: "5h", label: "5 hours", durationMs: 18_000_000, resetsAt: 2_000_000 },
   amount: { usedFraction: 0.2, unit: "percent" },
 });
@@ -90,5 +94,50 @@ describe("usage report normalization", () => {
     const result = normalizeUsageReports([newer, older]);
     expect(result.snapshots).toHaveLength(1);
     expect(result.snapshots[0]?.limits.map((entry) => entry.limit.id)).toEqual(["5h", "7d"]);
+  });
+  test("normalizes a single tier through the singular API", () => {
+    const snapshot = normalizeUsageReport(
+      report({ limits: [limit("spark", "acct-a", " Spark ")] }),
+    );
+    expect(snapshot).toMatchObject({
+      id: "anthropic:account:acct-a:tier:spark",
+      accountId: "anthropic:account:acct-a",
+      tier: "spark",
+    });
+  });
+
+  test("partitions regular and Spark limits and merges updates within each tier", () => {
+    const regular = limit("regular", "acct-a");
+    const spark = limit("spark", "acct-a", " Spark ");
+    const newerRegular = {
+      ...regular,
+      amount: { ...regular.amount, usedFraction: 0.9 },
+    };
+    const newerSpark = {
+      ...spark,
+      amount: { ...spark.amount, usedFraction: 0.4 },
+    };
+    const result = normalizeUsageReports([
+      report({ limits: [regular, spark] }),
+      report({ fetchedAt: 2_000_000, limits: [newerRegular, newerSpark] }),
+    ]);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.snapshots).toHaveLength(2);
+    const [base, sparkSnapshot] = result.snapshots;
+    expect(base).toMatchObject({
+      id: "anthropic:account:acct-a",
+      accountId: "anthropic:account:acct-a",
+    });
+    expect(base?.tier).toBeUndefined();
+    expect(base?.limits.map((entry) => entry.limit.id)).toEqual(["regular"]);
+    expect(base?.limits[0]?.limit.amount.usedFraction).toBe(0.9);
+    expect(sparkSnapshot).toMatchObject({
+      id: "anthropic:account:acct-a:tier:spark",
+      accountId: "anthropic:account:acct-a",
+      tier: "spark",
+    });
+    expect(sparkSnapshot?.limits.map((entry) => entry.limit.id)).toEqual(["spark"]);
+    expect(sparkSnapshot?.limits[0]?.limit.amount.usedFraction).toBe(0.4);
   });
 });

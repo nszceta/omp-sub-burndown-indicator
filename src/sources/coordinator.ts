@@ -43,9 +43,13 @@ export function mergeSnapshots(groups: readonly SubscriptionSnapshot[][]): Subsc
       const accountLabel = identityIsStronger
         ? (incoming.accountLabel ?? existing.accountLabel)
         : (existing.accountLabel ?? incoming.accountLabel);
+      const accountId = existing.accountId ?? incoming.accountId;
+      const tier = existing.tier ?? incoming.tier;
       merged.set(incoming.id, {
         id: existing.id,
         provider: existing.provider,
+        ...(accountId !== undefined ? { accountId } : {}),
+        ...(tier !== undefined ? { tier } : {}),
         ...(accountLabel ? { accountLabel } : {}),
         identitySource: identityIsStronger ? incoming.identitySource : existing.identitySource,
         limits: [...observations.values()].sort((a, b) =>

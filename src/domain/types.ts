@@ -16,16 +16,21 @@ export interface LimitObservation {
 export interface SubscriptionSnapshot {
   id: string;
   provider: string;
+  /** Stable base identity shared by all quota tiers for this account. */
+  accountId?: string;
+  tier?: string;
   accountLabel?: string;
   identitySource: UsageSourceId;
   limits: LimitObservation[];
 }
-
 export type SegmentState = "ahead" | "on-pace" | "behind" | "exhausted" | "unknown";
 
 export interface BurndownSegment {
   subscriptionId: string;
   provider: string;
+  /** Stable base identity used to group tiered segments as one account. */
+  accountId?: string;
+  tier?: string;
   label: string;
   windowId?: string;
   resetsAt?: number;

@@ -9,7 +9,7 @@ const segment = (
   id: string,
   state: BurndownSegment["state"],
   paceDelta?: number,
-  extra: Partial<BurndownSegment> = {},
+  extra: Partial<BurndownSegment> & { accountId?: string; tier?: string } = {},
 ): BurndownSegment => ({
   subscriptionId: id,
   provider: "provider",
@@ -36,9 +36,9 @@ describe("burndown row", () => {
       resetsAt: now + 6 * 24 * 60 * 60_000 + 4 * 60 * 60_000 + 60_001,
       usedFraction: 0.88,
     });
-    expect(
-      renderBurndownRow([value], 200, { now, theme: identityTheme, density: "text" }),
-    ).toEqual(["Provider ▼61 points behind · 12% left · 6d4h2m"]);
+    expect(renderBurndownRow([value], 200, { now, theme: identityTheme, density: "text" })).toEqual(
+      ["Provider ▼61 points behind · 12% left · 6d4h2m"],
+    );
   });
 
   test("renders every state and both symbol modes", () => {
@@ -170,6 +170,77 @@ describe("burndown row", () => {
     });
     expect(minimal).toEqual(["Anthropic ▲10pp", "OpenAI Codex▲10"]);
     expect(minimal.join("")).not.toMatch(/\b(?:An|OC)▲/u);
+  });
+
+  test("keeps base and Spark quotas under one account without qualification", () => {
+    const values = [
+      segment("base", "ahead", 0.1, {
+        provider: "openai-codex",
+        label: "user@example.test",
+        accountId: "account-a",
+      }),
+      segment("spark", "ahead", 0.1, {
+        provider: "openai-codex",
+        label: "user@example.test",
+        accountId: "account-a",
+        tier: "spark",
+      }),
+    ];
+    const labels = buildStableLabels(values);
+    expect(labels.providerFull.get("base")).toBe("OpenAI Codex");
+    expect(labels.providerFull.get("spark")).toBe("OpenAI Codex Spark");
+    expect(labels.full.get("base")).toBe("user@example.test");
+    expect(labels.full.get("spark")).toBe("user@example.test");
+    expect(labels.accountRequired.size).toBe(0);
+
+    const full = renderBurndownRow(values, 100, {
+      now,
+      density: "text",
+      showReset: false,
+      theme: identityTheme,
+    }).join("");
+    expect(full).toBe("OpenAI Codex ▲10 points ahead · OpenAI Codex Spark ▲10 points ahead");
+    expect(full).not.toContain("user@example.test");
+  });
+
+  test("qualifies base and Spark providers when a second account exists", () => {
+    const values = [
+      segment("base-a", "ahead", 0.1, {
+        provider: "openai-codex",
+        label: "user@example.test",
+        accountId: "account-a",
+      }),
+      segment("spark-a", "ahead", 0.1, {
+        provider: "openai-codex",
+        label: "user@example.test",
+        accountId: "account-a",
+        tier: "spark",
+      }),
+      segment("base-b", "ahead", 0.1, {
+        provider: "openai-codex",
+        label: "work@example.test",
+        accountId: "account-b",
+      }),
+    ];
+    const labels = buildStableLabels(values);
+    expect(labels.providerFull.get("base-a")).toBe("OpenAI Codex");
+    expect(labels.providerFull.get("spark-a")).toBe("OpenAI Codex Spark");
+    expect(labels.providerFull.get("base-b")).toBe("OpenAI Codex");
+    expect(labels.full.get("base-a")).toBe("user@example.test");
+    expect(labels.full.get("spark-a")).toBe("user@example.test");
+    expect(labels.full.get("base-b")).toBe("work@example.test");
+    expect(labels.accountRequired).toEqual(new Set(["base-a", "base-b", "spark-a"]));
+
+    const full = renderBurndownRow(values, 200, {
+      now,
+      density: "text",
+      showReset: false,
+      theme: identityTheme,
+    }).join("");
+    expect(full).toContain("OpenAI Codex:user@example.test ▲10 points ahead");
+    expect(full).toContain("OpenAI Codex Spark:user@example.test ▲10 points ahead");
+    expect(full).toContain("OpenAI Codex:work@example.test ▲10 points ahead");
+    expect(full).not.toContain("#2");
   });
 
   test("uses complete account labels for multiple accounts on one provider", () => {

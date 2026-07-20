@@ -55,6 +55,25 @@ describe("mergeSnapshots", () => {
     expect(merged?.limits[0]?.measurementSource).toBe("omp-broker");
   });
 
+  test("preserves account identity and tier while merging compatible snapshots", () => {
+    const id = "anthropic:account:acct:tier:spark";
+    const accountId = "anthropic:account:acct";
+    const older = {
+      ...snapshot("omp-broker", 1_000, 0.4),
+      id,
+      accountId,
+      tier: "spark",
+    };
+    const newer = {
+      ...snapshot("omp-response", 2_000, 0.5),
+      id,
+      accountId,
+      tier: "spark",
+    };
+    const [merged] = mergeSnapshots([[older], [newer]]);
+    expect(merged).toMatchObject({ id, accountId, tier: "spark" });
+  });
+
   test("different stable account IDs never merge", () => {
     const other = snapshot("provider-endpoint", 2_000, 0.7);
     other.id = "anthropic:account:other";

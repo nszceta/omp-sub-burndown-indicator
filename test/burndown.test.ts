@@ -190,4 +190,40 @@ describe("burndown window and pace", () => {
     ]);
     expect(segments[1]?.state).toBe("unknown");
   });
+  test("propagates base account identity and tier, with legacy fallback", () => {
+    const accountId = "anthropic:account:acct";
+    const segments = computeBurndownSegments(
+      [
+        {
+          ...snapshot([observation("regular", 100, NOW + 50, 0.1)]),
+          id: accountId,
+          accountId,
+        },
+        {
+          ...snapshot([observation("spark", 100, NOW + 50, 0.2)]),
+          id: `${accountId}:tier:spark`,
+          accountId,
+          tier: "spark",
+        },
+      ],
+      { now: NOW, clockSkewMs: 0 },
+    );
+    expect(
+      segments.map(({ subscriptionId, accountId: segmentAccountId, tier }) => ({
+        subscriptionId,
+        accountId: segmentAccountId,
+        tier,
+      })),
+    ).toEqual([
+      { subscriptionId: accountId, accountId, tier: undefined },
+      {
+        subscriptionId: `${accountId}:tier:spark`,
+        accountId,
+        tier: "spark",
+      },
+    ]);
+
+    const legacy = calculateBurndownSegment(snapshot([]), { now: NOW });
+    expect(legacy.accountId).toBe("anthropic:account:a");
+  });
 });

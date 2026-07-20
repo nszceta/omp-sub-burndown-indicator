@@ -75,6 +75,7 @@ The package manifest declares:
 ## Data sources
 
 Sources are merged by stable, non-secret subscription identity. Identity authority is OMP's authenticated usage service, then broker, direct endpoint, and finally a provider-only response snapshot. Complete headers remain a supplemental fast path; they never assign one response across multiple same-provider accounts.
+Independent quota tiers are separate subscriptions under their stable base account identity. For example, OMP's Codex `spark` tier renders as `OpenAI Codex Spark`; it never replaces the base Codex quota or creates a second account label.
 
 ### 1. OMP authenticated usage (default)
 
@@ -191,6 +192,7 @@ OpenAI Codex ▼61pp · 12% left · 6d4h2m
 ```
 
 The full form retains days, hours, and minutes when they are nonzero, and rounds a partial minute up so it never understates the remaining reset time.
+Independent tiers render as their own provider-brand segments while sharing the same account grouping. For example, a single Codex account with both quotas renders `OpenAI Codex … · OpenAI Codex Spark …` without an email label or a synthetic `#2` account.
 
 When one provider has multiple accounts, width degradation changes only the signal and detail portions; the complete provider brand and required account label stay unchanged:
 

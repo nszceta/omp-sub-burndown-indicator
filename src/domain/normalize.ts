@@ -154,6 +154,62 @@ function identityId(provider: string, identity: Identity): string {
   if (identity.key === "provider") return `provider:${provider}`;
   return `${provider}:${identity.key}:${encodeURIComponent(identity.value ?? "")}`;
 }
+interface LimitPartition {
+  tier?: string;
+  limits: UsageLimit[];
+}
+
+function partitionLimits(limits: readonly UsageLimit[]): LimitPartition[] {
+  const byTier = new Map<string | undefined, UsageLimit[]>();
+  if (limits.length === 0) byTier.set(undefined, []);
+  for (const limit of limits) {
+    const tier = stringValue(limit.scope.tier)?.toLowerCase();
+    const partition = byTier.get(tier);
+    if (partition) partition.push(limit);
+    else byTier.set(tier, [limit]);
+  }
+
+  const partitions: LimitPartition[] = [];
+  const base = byTier.get(undefined);
+  if (base) partitions.push({ limits: base });
+  for (const [tier, partition] of byTier) {
+    if (tier !== undefined) partitions.push({ tier, limits: partition });
+  }
+  return partitions;
+}
+
+function mergeSnapshot(
+  snapshotsById: Map<string, SubscriptionSnapshot>,
+  snapshot: SubscriptionSnapshot,
+): void {
+  const previous = snapshotsById.get(snapshot.id);
+  if (!previous) {
+    snapshotsById.set(snapshot.id, snapshot);
+    return;
+  }
+
+  // A report can be split by a source into multiple entries. Preserve the
+  // newest observation for each stable limit ID without reordering limits.
+  const byLimit = new Map(
+    previous.limits.map((observation) => [observation.limit.id, observation]),
+  );
+  for (const observation of snapshot.limits) {
+    const old = byLimit.get(observation.limit.id);
+    if (!old || observation.fetchedAt >= old.fetchedAt)
+      byLimit.set(observation.limit.id, observation);
+  }
+  snapshotsById.set(snapshot.id, { ...previous, limits: [...byLimit.values()] });
+}
+
+function snapshotsFromReport(
+  report: UsageReport,
+  identity: Identity,
+  options: NormalizeOptions,
+): SubscriptionSnapshot[] {
+  return partitionLimits(report.limits).map((partition) =>
+    snapshotFromReport(report, identity, options, partition),
+  );
+}
 
 function staleValue(fetchedAt: number, options: NormalizeOptions): boolean {
   const staleAfterMs = options.staleAfterMs ?? Number.POSITIVE_INFINITY;
@@ -166,18 +222,26 @@ function snapshotFromReport(
   report: UsageReport,
   identity: Identity,
   options: NormalizeOptions,
+  partition: LimitPartition,
 ): SubscriptionSnapshot {
   const source = options.measurementSource ?? DEFAULT_SOURCE;
   const fetchedAt = report.fetchedAt;
-  const limits: LimitObservation[] = report.limits.map((limit: UsageLimit) => ({
+  const provider = providerValue(report.provider) ?? "unknown";
+  const baseIdentityId = identityId(provider, identity);
+  const limits: LimitObservation[] = partition.limits.map((limit: UsageLimit) => ({
     limit,
     measurementSource: source,
     fetchedAt,
     stale: staleValue(fetchedAt, options),
   }));
   return {
-    id: identityId(providerValue(report.provider) ?? "unknown", identity),
-    provider: providerValue(report.provider) ?? "unknown",
+    id:
+      partition.tier === undefined
+        ? baseIdentityId
+        : `${baseIdentityId}:tier:${encodeURIComponent(partition.tier)}`,
+    provider,
+    accountId: baseIdentityId,
+    ...(partition.tier !== undefined ? { tier: partition.tier } : {}),
     ...(identity.label ? { accountLabel: identity.label } : {}),
     identitySource: source,
     limits,
@@ -197,7 +261,8 @@ export function normalizeUsageReport(
     options.providerIsUnambiguous === true || options.allowProviderOnly === true,
   );
   if (!("identity" in identityResult)) return undefined;
-  return snapshotFromReport(report, identityResult.identity, options);
+  const snapshots = snapshotsFromReport(report, identityResult.identity, options);
+  return snapshots.length === 1 ? snapshots[0] : undefined;
 }
 
 /** Normalize reports and expose reports that cannot be assigned a safe identity. */
@@ -229,32 +294,23 @@ export function normalizeUsageReports(
       else diagnostics.push({ provider, ...identityResult, reportIndex: index });
       return;
     }
-    const snapshot = snapshotFromReport(report, identityResult.identity, options);
-    const previous = snapshotsById.get(snapshot.id);
-    if (!previous) {
-      snapshotsById.set(snapshot.id, snapshot);
-    } else {
-      // A report can be split by a source into multiple entries. Preserve the
-      // newest observation for each stable limit ID without reordering limits.
-      const byLimit = new Map(
-        previous.limits.map((observation) => [observation.limit.id, observation]),
-      );
-      for (const observation of snapshot.limits) {
-        const old = byLimit.get(observation.limit.id);
-        if (!old || observation.fetchedAt >= old.fetchedAt)
-          byLimit.set(observation.limit.id, observation);
-      }
-      snapshotsById.set(snapshot.id, { ...previous, limits: [...byLimit.values()] });
+    for (const snapshot of snapshotsFromReport(report, identityResult.identity, options)) {
+      mergeSnapshot(snapshotsById, snapshot);
     }
   });
 
   for (const anonymous of pendingAnonymous) {
     if ((providerCounts.get(anonymous.provider) ?? 0) === 1) {
-      const snapshot = normalizeUsageReport(anonymous.report, {
-        ...options,
-        providerIsUnambiguous: true,
-      });
-      if (snapshot) snapshotsById.set(snapshot.id, snapshot);
+      const identityResult = reportIdentity(anonymous.report, anonymous.provider, true);
+      if ("identity" in identityResult) {
+        for (const snapshot of snapshotsFromReport(
+          anonymous.report,
+          identityResult.identity,
+          options,
+        )) {
+          mergeSnapshot(snapshotsById, snapshot);
+        }
+      }
     } else {
       diagnostics.push({
         provider: anonymous.provider,

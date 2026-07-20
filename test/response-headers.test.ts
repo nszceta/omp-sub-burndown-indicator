@@ -70,6 +70,7 @@ describe("ResponseHeaderUsageSource", () => {
       {
         id: "provider:demo",
         provider: "demo",
+        accountId: "provider:demo",
         identitySource: "omp-response",
         limits: [
           {

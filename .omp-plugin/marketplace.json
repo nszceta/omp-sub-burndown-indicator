@@ -10,7 +10,7 @@
     {
       "name": "omp-sub-burndown-indicator",
       "description": "One-line subscription quota burndown indicator for Oh My Pi",
-      "version": "0.2.3",
+      "version": "0.2.4",
       "source": {
         "source": "github",
         "repo": "nszceta/omp-sub-burndown-indicator"

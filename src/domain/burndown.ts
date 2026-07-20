@@ -111,6 +111,8 @@ export function calculateBurndownSegment(
   const base = {
     subscriptionId: snapshot.id,
     provider: snapshot.provider,
+    accountId: snapshot.accountId ?? snapshot.id,
+    ...(snapshot.tier !== undefined ? { tier: snapshot.tier } : {}),
     label: snapshot.accountLabel ?? snapshot.provider,
   };
 
