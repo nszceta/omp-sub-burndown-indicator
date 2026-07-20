@@ -32,6 +32,9 @@ function currentWindow(limit: UsageLimit): boolean {
   const resetsAt = limit.window?.resetsAt;
   return finiteNumber(durationMs) && durationMs > 0 && finiteNumber(resetsAt);
 }
+function elapsedFractionAt(now: number, resetsAt: number, durationMs: number): number {
+  return Math.min(1, Math.max(0, (now - (resetsAt - durationMs)) / durationMs));
+}
 
 /** Return windows that can participate in deterministic shortest-window selection. */
 export function eligibleBurndownWindows(
@@ -53,7 +56,7 @@ export function eligibleBurndownWindows(
   return result;
 }
 
-/** Select the shortest positive window, with deterministic reset and ID ties. */
+/** Select the shortest positive window; matching nominal windows prefer worst pace, then reset and ID ties. */
 export function selectShortestBurndownWindow(
   snapshot: SubscriptionSnapshot,
   now = Date.now(),
@@ -61,11 +64,18 @@ export function selectShortestBurndownWindow(
 ): EligibleWindow | undefined {
   const eligible = eligibleBurndownWindows(snapshot, now, clockSkewMs);
   eligible.sort((left, right) => {
-    const leftDuration = left.observation.limit.window?.durationMs ?? Number.POSITIVE_INFINITY;
-    const rightDuration = right.observation.limit.window?.durationMs ?? Number.POSITIVE_INFINITY;
+    const leftWindow = left.observation.limit.window;
+    const rightWindow = right.observation.limit.window;
+    const leftDuration = leftWindow?.durationMs ?? Number.POSITIVE_INFINITY;
+    const rightDuration = rightWindow?.durationMs ?? Number.POSITIVE_INFINITY;
+    const leftReset = leftWindow?.resetsAt ?? Number.POSITIVE_INFINITY;
+    const rightReset = rightWindow?.resetsAt ?? Number.POSITIVE_INFINITY;
+    if (leftWindow?.id !== undefined && leftWindow.id === rightWindow?.id) {
+      const leftUrgency = elapsedFractionAt(now, leftReset, leftDuration) - left.usedFraction;
+      const rightUrgency = elapsedFractionAt(now, rightReset, rightDuration) - right.usedFraction;
+      if (leftUrgency !== rightUrgency) return leftUrgency - rightUrgency;
+    }
     if (leftDuration !== rightDuration) return leftDuration - rightDuration;
-    const leftReset = left.observation.limit.window?.resetsAt ?? Number.POSITIVE_INFINITY;
-    const rightReset = right.observation.limit.window?.resetsAt ?? Number.POSITIVE_INFINITY;
     if (leftReset !== rightReset) return leftReset - rightReset;
     return left.observation.limit.id.localeCompare(right.observation.limit.id);
   });
@@ -129,9 +139,8 @@ export function calculateBurndownSegment(
   if (!finiteNumber(durationMs) || !finiteNumber(resetsAt)) {
     return { ...base, ...metadata, state: "unknown", stale };
   }
-  const start = resetsAt - durationMs;
   const toleranceBoundary = tolerance + Number.EPSILON * 8;
-  const elapsedFraction = Math.min(1, Math.max(0, (now - start) / durationMs));
+  const elapsedFraction = elapsedFractionAt(now, resetsAt, durationMs);
   const paceDelta = elapsedFraction - usedFraction;
   let state: BurndownSegment["state"];
   if (usedFraction >= 1) state = "exhausted";

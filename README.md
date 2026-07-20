@@ -6,7 +6,7 @@ A standalone [Oh My Pi](https://omp.sh) extension that renders one segmented sub
 Anthropic ▲12pp ahead · OpenAI Codex ▼4pp behind · Google Gemini =0pp on pace
 ```
 
-Each segment uses the eligible usage window with the shortest positive duration. The number is the rounded difference, in percentage points (`pp`), between elapsed time and consumed quota:
+Each segment selects the eligible window with the shortest positive duration across distinct nominal windows. When multiple limits report the same nominal window (such as independent 7d quota buckets), it uses the one furthest behind pace so an unused parallel bucket cannot hide an overused one. The number is the rounded difference, in percentage points (`pp`), between elapsed time and consumed quota:
 
 ```text
 pace delta = elapsed fraction - used fraction

@@ -16,15 +16,16 @@ const observation = (
   usedFraction: number | undefined,
   fetchedAt = NOW,
   stale = false,
+  windowId = id,
 ): LimitObservation => {
   const limit: UsageLimit = {
     id,
     label: id,
-    scope: { provider: "anthropic", windowId: id },
+    scope: { provider: "anthropic", windowId },
     ...(durationMs !== undefined || resetsAt !== undefined
       ? {
           window: {
-            id,
+            id: windowId,
             label: id,
             ...(durationMs !== undefined ? { durationMs } : {}),
             ...(resetsAt !== undefined ? { resetsAt } : {}),
@@ -76,17 +77,42 @@ describe("burndown window and pace", () => {
 
   test("uses reset timestamp then stable limit ID tie breakers", () => {
     const earlier = selectShortestBurndownWindow(
-      snapshot([observation("z", 100, NOW + 200, 0.1), observation("a", 100, NOW + 100, 0.1)]),
+      snapshot([
+        observation("z", 100, NOW + 200, 0.1, NOW, false, "shared"),
+        observation("a", 100, NOW + 100, 0.1, NOW, false, "shared"),
+      ]),
       NOW,
       0,
     );
     expect(earlier?.observation.limit.id).toBe("a");
     const lexical = selectShortestBurndownWindow(
-      snapshot([observation("z", 100, NOW + 100, 0.1), observation("a", 100, NOW + 100, 0.1)]),
+      snapshot([
+        observation("z", 100, NOW + 100, 0.1, NOW, false, "shared"),
+        observation("a", 100, NOW + 100, 0.1, NOW, false, "shared"),
+      ]),
       NOW,
       0,
     );
     expect(lexical?.observation.limit.id).toBe("a");
+  });
+
+  test("selects the most urgent pace among same-window limits", () => {
+    const durationMs = 168 * 60 * 60 * 1_000;
+    const sparkDurationMs = durationMs - 1;
+    const resetsAt = NOW + 126 * 60 * 60 * 1_000;
+    const selectedSnapshot = snapshot([
+      observation("a-spark", sparkDurationMs, resetsAt, 0, NOW, false, "7d"),
+      observation("normal", durationMs, resetsAt, 0.85, NOW, false, "7d"),
+    ]);
+
+    const selected = selectShortestBurndownWindow(selectedSnapshot, NOW, 0);
+    expect(selected?.observation.limit.id).toBe("normal");
+
+    const segment = calculateBurndownSegment(selectedSnapshot, { now: NOW, clockSkewMs: 0 });
+    expect(segment.usedFraction).toBe(0.85);
+    expect(segment.elapsedFraction).toBe(0.25);
+    expect(segment.paceDelta).toBeCloseTo(-0.6);
+    expect(segment.state).toBe("behind");
   });
 
   test("computes elapsed fraction and pace delta, with ahead/behind states", () => {
