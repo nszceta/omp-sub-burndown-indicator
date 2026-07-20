@@ -32,16 +32,10 @@ export type LabelSegment = Pick<BurndownSegment, "subscriptionId" | "provider" |
 };
 
 export interface StableLabels {
-  /** Account display names, keyed by stable subscription id. */
+  /** Full collision-disambiguated account display names, keyed by stable subscription id. */
   readonly full: ReadonlyMap<string, string>;
-  /** Compact account names, keyed by stable subscription id. */
-  readonly compact: ReadonlyMap<string, string>;
-  /** Minimal account names, keyed by stable subscription id. */
-  readonly minimal: ReadonlyMap<string, string>;
-  /** Provider brand names, keyed by stable subscription id. */
+  /** Full provider brand names, keyed by stable subscription id. */
   readonly providerFull: ReadonlyMap<string, string>;
-  /** Compact provider names for severely constrained rows. */
-  readonly providerMinimal: ReadonlyMap<string, string>;
   /** Subscriptions whose provider has multiple accounts and needs an account label. */
   readonly accountRequired: ReadonlySet<string>;
 }
@@ -51,36 +45,6 @@ function clean(value: string | undefined): string {
 
 function displayName(segment: LabelSegment): string {
   return clean(segment.label) || clean(segment.accountLabel) || clean(segment.provider) || "?";
-}
-
-function graphemes(value: string): string[] {
-  return [...value];
-}
-
-/** Build a deterministic short name from a provider/account display label. */
-export function compactLabel(value: string): string {
-  const normalized = clean(value);
-  if (!normalized) return "?";
-  const at = normalized.indexOf("@");
-  if (at > 0) {
-    const localPart = normalized.slice(0, at).replace(/[^\p{L}\p{N}]/gu, "");
-    const abbreviatedLocalPart = graphemes(localPart).slice(0, 2).join("");
-    if (abbreviatedLocalPart) return abbreviatedLocalPart;
-  }
-  const words = normalized.split(/[^\p{L}\p{N}]+/u).filter(Boolean);
-  if (words.length > 1) {
-    const initials = words.map((word) => graphemes(word)[0] ?? "").join("");
-    if (initials) return initials.slice(0, 2);
-  }
-  return graphemes(normalized.replace(/[^\p{L}\p{N}]/gu, ""))[0] === undefined
-    ? "?"
-    : graphemes(normalized.replace(/[^\p{L}\p{N}]/gu, ""))
-        .slice(0, 2)
-        .join("");
-}
-
-function minimalLabel(value: string): string {
-  return graphemes(value)[0] ?? "?";
 }
 
 /**
@@ -94,13 +58,8 @@ export function buildStableLabels(segments: readonly LabelSegment[]): StableLabe
     providerCounts.set(segment.provider, (providerCounts.get(segment.provider) ?? 0) + 1);
   }
   const fullCounts = new Map<string, number>();
-  const compactCounts = new Map<string, number>();
-  const minimalCounts = new Map<string, number>();
   const full = new Map<string, string>();
-  const compact = new Map<string, string>();
-  const minimal = new Map<string, string>();
   const providerFull = new Map<string, string>();
-  const providerMinimal = new Map<string, string>();
   const accountRequired = new Set<string>();
 
   for (const segment of ordered) {
@@ -113,41 +72,20 @@ export function buildStableLabels(segments: readonly LabelSegment[]): StableLabe
     const fullKey = `${collisionScope}${name}`;
     const fullNumber = (fullCounts.get(fullKey) ?? 0) + 1;
     fullCounts.set(fullKey, fullNumber);
-    const short = compactLabel(name);
-    const shortKey = `${collisionScope}${short}`;
-    const shortNumber = (compactCounts.get(shortKey) ?? 0) + 1;
-    compactCounts.set(shortKey, shortNumber);
-    const tiny = minimalLabel(short);
-    const tinyKey = `${collisionScope}${tiny}`;
-    const tinyNumber = (minimalCounts.get(tinyKey) ?? 0) + 1;
-    minimalCounts.set(tinyKey, tinyNumber);
 
     full.set(segment.subscriptionId, fullNumber === 1 ? name : `${name}#${fullNumber}`);
-    compact.set(segment.subscriptionId, shortNumber === 1 ? short : `${short}#${shortNumber}`);
-    minimal.set(segment.subscriptionId, tinyNumber === 1 ? tiny : `${tiny}#${tinyNumber}`);
     providerFull.set(segment.subscriptionId, provider);
-    providerMinimal.set(segment.subscriptionId, compactLabel(provider));
   }
-  return { full, compact, minimal, providerFull, providerMinimal, accountRequired };
+  return { full, providerFull, accountRequired };
 }
 
 /** Alias retained as the natural imperative name for callers. */
 export const assignStableLabels = buildStableLabels;
 
-export function labelFor(
-  labels: StableLabels,
-  subscriptionId: string,
-  form: "full" | "compact" | "minimal",
-): string {
-  return labels[form].get(subscriptionId) ?? "?";
+export function labelFor(labels: StableLabels, subscriptionId: string): string {
+  return labels.full.get(subscriptionId) ?? "?";
 }
 
-export function providerLabelFor(
-  labels: StableLabels,
-  subscriptionId: string,
-  form: "full" | "minimal",
-): string {
-  return (
-    (form === "full" ? labels.providerFull : labels.providerMinimal).get(subscriptionId) ?? "?"
-  );
+export function providerLabelFor(labels: StableLabels, subscriptionId: string): string {
+  return labels.providerFull.get(subscriptionId) ?? "?";
 }

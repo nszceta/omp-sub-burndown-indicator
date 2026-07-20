@@ -104,9 +104,9 @@ test("controller installs one above-editor width-aware row and clears on shutdow
       theme: { fg(_color: string, text: string): string },
     ) => { render(width: number): readonly string[] }
   )({ requestRender: () => state.renders++ }, { fg: (_color, text) => text });
-  const rows = component.render(9);
+  const rows = component.render(12);
   expect(rows).toHaveLength(1);
-  expect(visibleWidth(rows[0] ?? "")).toBeLessThanOrEqual(9);
+  expect(visibleWidth(rows[0] ?? "")).toBeLessThanOrEqual(12);
   controller.shutdown(ctx);
   expect(state.cleared).toBe(true);
 });

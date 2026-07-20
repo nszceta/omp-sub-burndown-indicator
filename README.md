@@ -1,6 +1,6 @@
 # OMP Subscription Burndown Indicator
 
-A standalone [Oh My Pi](https://omp.sh) extension that renders one segmented subscription-quota row immediately above the interactive editor.
+A standalone [Oh My Pi](https://omp.sh) extension that renders a segmented subscription-quota indicator immediately above the interactive editor. When segments exceed the available width, complete segments continue on subsequent indicator lines rather than being split.
 
 ```text
 Anthropic ▲12pp · OpenAI Codex ▼4pp · Google Gemini =0pp
@@ -14,7 +14,7 @@ pace delta = elapsed fraction - used fraction
 
 For example, `▲12pp` means usage is 12 percentage points below the linear consumption pace, so the quota is currently safe. `▼4pp` means usage is 4 percentage points over pace. This pace value is deliberately not the provider's `% used` or `% free`; the full form separately displays rounded remaining quota and the reset countdown. An exhausted quota always renders as exhausted regardless of its calculated delta.
 
-Every segment always starts with the provider. The account identifier is omitted when that provider has exactly one account; it is shown only when two or more accounts for the same provider must be distinguished. Email abbreviations use only the local part before `@`, so `hi@adamgradzki.com` becomes `hi`, never a local/domain mixture such as `ha`. A true same-provider label collision uses an explicit ordinal such as `hi@adamgradzki.com#2`.
+Every segment always starts with the complete provider brand. The account identifier is omitted when that provider has exactly one account; it is shown only when two or more accounts for the same provider must be distinguished. Required account labels remain complete, including their full email or account text. A true same-provider label collision uses an explicit ordinal such as `hi@adamgradzki.com#2`.
 
 ## Requirements
 
@@ -192,14 +192,15 @@ OpenAI Codex ▼61pp · 12% left · 6d4h2m
 
 The full form retains days, hours, and minutes when they are nonzero, and rounds a partial minute up so it never understates the remaining reset time.
 
-When one provider has multiple accounts, width degradation retains both identities:
+When one provider has multiple accounts, width degradation changes only the signal and detail portions; the complete provider brand and required account label stay unchanged:
 
 1. `Anthropic:hi@adamgradzki.com ▲12pp · 64% left · 2h`
-2. `Anthropic:hi ▲12 points`
-3. `An:h▲12`
-4. urgent segments plus `+N` hidden count
+2. `Anthropic:hi@adamgradzki.com ▲12 points`
+3. `Anthropic:hi@adamgradzki.com ▲12`
 
-Provider names use readable brands (`Anthropic`, `OpenAI Codex`, `Google Gemini`) instead of internal provider IDs. The renderer measures visible terminal cells, including ANSI and wide Unicode handling. It emits zero or one line and never wraps. If no meaningful direction and magnitude fit, it emits no row.
+Width pressure preserves provider and required account names in full. Each complete segment stays whole and remains in global risk order, moving to a subsequent indicator line when it does not fit. A segment is omitted only when its full-name minimal-signal form cannot fit the available width; every segment whose full-name minimal-signal form fits appears on some indicator line, with no hidden-count marker.
+
+Provider names use complete readable brands (`Anthropic`, `OpenAI Codex`, `Google Gemini`) instead of internal provider IDs and remain verbatim at every width. The renderer measures visible terminal cells, including ANSI and wide Unicode handling. It emits zero or more indicator lines, each within the available width. If no meaningful direction and magnitude fit, it emits no indicator.
 
 ## Diagnostics
 
@@ -268,12 +269,12 @@ bun pm pack
 Manual interactive smoke test with OMP authenticated providers:
 
 1. Install or link the plugin.
-2. Start interactive `omp` and confirm one row appears directly above the editor.
+2. Start interactive `omp` and confirm the subscription indicator appears directly above the editor.
 3. Run `/usage`, then `/burndown-status`; confirm `omp-auth-storage` is enabled and the reported providers match eligible `/usage` providers.
-4. Resize to narrow and wide terminal widths; confirm the row remains one line and degrades to compact forms with `+N`.
+4. Resize to narrow and wide terminal widths; confirm complete segments remain whole, retain risk order, and move to subsequent indicator lines when needed; segments whose full-name minimal-signal form cannot fit are omitted rather than summarized by a hidden-count marker.
 5. Switch themes; confirm semantic glyphs remain readable with and without color.
-6. Change the fake or real usage response and confirm the row refreshes.
-7. Switch sessions and navigate the session tree; confirm only one refreshed row remains.
+6. Change the fake or real usage response and confirm the indicator refreshes.
+7. Switch sessions and navigate the session tree; confirm only one refreshed indicator remains.
 8. Exit OMP; confirm shutdown clears the widget and leaves no poller.
 
 The automated suite also covers headless/RPC/ACP-safe no-op behavior through fake public host contexts, cancellation and generation guards, stale expiry, source precedence, and exact rendering widths.

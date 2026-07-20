@@ -126,25 +126,18 @@ function formsFor(
   const compactSignal = style(theme, color, segmentSignalWithUnit(segment, symbols));
   const minimalSignal = style(theme, color, segmentSignal(segment, symbols));
   const separator = " ";
-  const provider = providerLabelFor(labels, segment.subscriptionId, "full");
-  const providerMinimal = providerLabelFor(labels, segment.subscriptionId, "minimal");
-  const account = labelFor(labels, segment.subscriptionId, "full");
-  const accountCompact = labelFor(labels, segment.subscriptionId, "compact");
-  const accountMinimal = labelFor(labels, segment.subscriptionId, "minimal");
+  const provider = providerLabelFor(labels, segment.subscriptionId);
+  const account = labelFor(labels, segment.subscriptionId);
   const hasDistinctAccount =
     labels.accountRequired.has(segment.subscriptionId) &&
     segment.label.trim().length > 0 &&
     segment.label.trim().toLocaleLowerCase() !== segment.provider.trim().toLocaleLowerCase();
   const qualifiedLabel = hasDistinctAccount ? `${provider}:${account}` : provider;
-  const qualifiedCompact = hasDistinctAccount ? `${provider}:${accountCompact}` : provider;
-  const qualifiedMinimal = hasDistinctAccount
-    ? `${providerMinimal}:${accountMinimal}`
-    : providerMinimal;
-  const compact = `${style(theme, "muted", qualifiedCompact)}${separator}${compactSignal}`;
-  const minimal = `${style(theme, "muted", qualifiedMinimal)}${minimalSignal}`;
+  const fullLabel = style(theme, "muted", qualifiedLabel);
+  const compact = `${fullLabel}${separator}${compactSignal}`;
+  const minimal = `${fullLabel}${minimalSignal}`;
   const reset = showReset ? resetCountdown(segment.resetsAt, now) : "";
   const remaining = remainingQuota(segment.usedFraction);
-  const fullLabel = style(theme, "muted", qualifiedLabel);
   const details = [remaining, reset].filter(Boolean);
   const full = details.length
     ? `${fullLabel}${separator}${fullSignal}${details
@@ -156,15 +149,12 @@ function formsFor(
 
 function chooseForms(
   forms: readonly RenderedForms[],
-  count: number,
   width: number,
   separator: string,
-  hidden: number,
 ): string[] | undefined {
-  const marker = hidden > 0 ? `+${hidden}` : "";
-  const markerWidth = marker ? visibleWidth(separator) + visibleWidth(marker) : 0;
+  const count = forms.length;
   const separatorsWidth = Math.max(0, count - 1) * visibleWidth(separator);
-  const budget = width - markerWidth - separatorsWidth;
+  const budget = width - separatorsWidth;
   if (budget < 0) return undefined;
   const chosen: string[] = [];
   let used = 0;
@@ -187,11 +177,10 @@ function chooseForms(
     chosen.push(candidate);
     used += visibleWidth(candidate);
   }
-  if (hidden > 0) chosen.push(marker);
   return chosen;
 }
 
-/** Render exactly zero or one line, always within the supplied cell budget. */
+/** Render zero or more lines, always within the supplied cell budget. */
 export function renderBurndownRow(
   segments: readonly BurndownSegment[],
   width: number,
@@ -218,14 +207,25 @@ export function renderBurndownRow(
       options.theme,
     ),
   );
-  for (let count = sorted.length; count >= 1; count--) {
-    const hidden = sorted.length - count;
-    const chosen = chooseForms(forms, count, budget, separator, hidden);
-    if (!chosen) continue;
-    const line = chosen.join(separator);
-    if (visibleWidth(line) <= budget) return [line];
+  const renderable = forms.filter((form) => visibleWidth(form.minimal) <= budget);
+  const lines: string[] = [];
+  for (let start = 0; start < renderable.length; ) {
+    let chosen: string[] | undefined;
+    let chosenLine: string | undefined;
+    for (let count = renderable.length - start; count >= 1; count--) {
+      const candidate = chooseForms(renderable.slice(start, start + count), budget, separator);
+      if (!candidate) continue;
+      const line = candidate.join(separator);
+      if (visibleWidth(line) > budget) continue;
+      chosen = candidate;
+      chosenLine = line;
+      break;
+    }
+    if (!chosen || chosenLine === undefined) break;
+    lines.push(chosenLine);
+    start += chosen.length;
   }
-  return EMPTY_ROWS;
+  return lines.length > 0 ? lines : EMPTY_ROWS;
 }
 
 export class BurndownRowComponent {

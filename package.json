@@ -1,6 +1,6 @@
 {
   "name": "omp-sub-burndown-indicator",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "One-line subscription quota burndown indicator for Oh My Pi",
   "type": "module",
   "license": "MIT",
