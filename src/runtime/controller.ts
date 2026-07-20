@@ -1,5 +1,6 @@
 import type { ProviderResponseMetadata } from "@oh-my-pi/pi-ai";
 import type { ExtensionContext } from "@oh-my-pi/pi-coding-agent";
+import { isProviderEnabled } from "@oh-my-pi/pi-coding-agent/capability";
 import { type BurndownConfig, readConfig, redact } from "../config.ts";
 import { computeBurndownSegments } from "../domain/burndown.ts";
 import type {
@@ -44,7 +45,7 @@ type WidgetContext = Pick<ExtensionContext, "ui" | "hasUI">;
 function modelProviders(ctx: ExtensionContext): string[] {
   const models =
     typeof ctx.models?.list === "function" ? ctx.models.list() : ctx.model ? [ctx.model] : [];
-  return discoverProviders(models);
+  return discoverProviders(models).filter(isProviderEnabled);
 }
 
 function isResponseSource(source: UsageSource): source is ResponseHeaderUsageSource {
@@ -138,7 +139,7 @@ export class IndicatorController {
     if (this.#disposed || !this.#responseSource || !ctx?.hasUI) return false;
     const model = typeof ctx.models?.current === "function" ? ctx.models.current() : ctx.model;
     const provider = model?.provider;
-    if (!provider) return false;
+    if (!provider || !isProviderEnabled(provider)) return false;
     const changed = this.#responseSource.ingest(provider, event.headers);
     if (changed && this.#isCurrentContext(ctx)) this.#render(this.#currentSnapshots());
     return changed;
@@ -311,14 +312,18 @@ export class IndicatorController {
     const snapshots = await coordinator.refresh(signal);
     if (this.#disposed || generation !== this.#generation || this.#ctx !== ctx || signal.aborted)
       return;
-    this.#responseSource?.setAuthoritativeSnapshots(snapshots);
+    this.#responseSource?.setAuthoritativeSnapshots(
+      snapshots.filter((snapshot) => isProviderEnabled(snapshot.provider)),
+    );
     this.#render(this.#currentSnapshots());
   }
 
   #currentSnapshots(): SubscriptionSnapshot[] {
     const coordinatorSnapshots = this.#coordinator?.current() ?? [];
     const responseSnapshots = this.#responseSource?.current() ?? [];
-    return mergeSnapshots([coordinatorSnapshots, responseSnapshots]);
+    return mergeSnapshots([coordinatorSnapshots, responseSnapshots]).filter((snapshot) =>
+      isProviderEnabled(snapshot.provider),
+    );
   }
 
   #render(snapshots: readonly SubscriptionSnapshot[]): void {

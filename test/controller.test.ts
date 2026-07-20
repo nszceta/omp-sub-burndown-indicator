@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import type { UsageProvider, UsageReport } from "@oh-my-pi/pi-ai";
 import type { ExtensionContext } from "@oh-my-pi/pi-coding-agent";
+import { getDisabledProviders, setDisabledProviders } from "@oh-my-pi/pi-coding-agent/capability";
 import { visibleWidth } from "@oh-my-pi/pi-tui";
 import type { BurndownConfig } from "../src/config.ts";
 import type { SubscriptionSnapshot } from "../src/domain/types.ts";
@@ -309,4 +310,28 @@ test("default sources report the same authenticated usage exposed by OMP", async
   )({ requestRender: () => state.renders++ }, { fg: (_color, text) => text });
   expect(component.render(80)[0]).toContain("-25");
   controller.shutdown(ctx);
+});
+
+test("controller excludes providers disabled by OMP configuration", async () => {
+  const disabledProviders = getDisabledProviders();
+  setDisabledProviders(["anthropic"]);
+  const state: FakeUiState = { cleared: false, renders: 0 };
+  const ctx = fakeContext(state);
+  const controller = new IndicatorController({
+    config,
+    now: () => now,
+    sources: [staticSource([snapshot()])],
+  });
+
+  try {
+    await controller.start(ctx);
+
+    expect(controller.diagnostic().discoveredProviders).toEqual([]);
+    expect(controller.diagnostic().reportedProviders).toEqual([]);
+    expect(controller.diagnostic().unavailableProviders).toEqual({});
+    expect(controller.status()).toContain("reported: none");
+  } finally {
+    controller.shutdown(ctx);
+    setDisabledProviders(disabledProviders);
+  }
 });
