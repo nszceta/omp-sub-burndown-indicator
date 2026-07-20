@@ -117,6 +117,6 @@ function unattributedPlaceholders(
   ].sort();
   return hidden.map((provider) => {
     const id = `provider:${provider}`;
-    return { id, provider, accountId: id, identitySource, limits: [] };
+    return { id, provider, accountId: id, identitySource, provisional: true, limits: [] };
   });
 }

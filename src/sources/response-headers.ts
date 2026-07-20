@@ -70,15 +70,6 @@ function cloneSnapshot(snapshot: SubscriptionSnapshot): SubscriptionSnapshot {
   return { ...snapshot, limits: [...snapshot.limits] };
 }
 
-function isAuthStorageProviderIdentity(snapshot: SubscriptionSnapshot): boolean {
-  const providerId = `provider:${snapshot.provider}`;
-  return (
-    snapshot.identitySource === "omp-auth-storage" &&
-    snapshot.id === providerId &&
-    snapshot.accountId === providerId
-  );
-}
-
 /** Builds usage snapshots from public response-header reports. */
 export class ResponseHeaderUsageSource implements UsageSource {
   readonly id = "omp-response";
@@ -99,7 +90,7 @@ export class ResponseHeaderUsageSource implements UsageSource {
 
   setAuthoritativeSnapshots(snapshots: readonly SubscriptionSnapshot[]): void {
     const authoritative = snapshots
-      .filter((snapshot) => !isAuthStorageProviderIdentity(snapshot))
+      .filter((snapshot) => snapshot.provisional !== true)
       .filter(
         (snapshot) =>
           snapshot.identitySource === "omp-auth-storage" ||

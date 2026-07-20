@@ -38,6 +38,7 @@ const authStoragePlaceholder = (provider: string): SubscriptionSnapshot => {
     provider,
     accountId: id,
     identitySource: "omp-auth-storage",
+    provisional: true,
     limits: [],
   };
 };

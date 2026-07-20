@@ -79,6 +79,20 @@ describe("mergeSnapshots", () => {
     other.id = "anthropic:account:other";
     expect(mergeSnapshots([[snapshot("omp-broker", 1_000, 0.4)], [other]])).toHaveLength(2);
   });
+
+  test("drops a provisional provider placeholder beside an identified account", () => {
+    const placeholder: SubscriptionSnapshot = {
+      id: "provider:anthropic",
+      provider: "anthropic",
+      accountId: "provider:anthropic",
+      identitySource: "omp-auth-storage",
+      provisional: true,
+      limits: [],
+    };
+    const known = snapshot("omp-broker", 1_000, 0.4);
+
+    expect(mergeSnapshots([[placeholder], [known]]).map((entry) => entry.id)).toEqual([known.id]);
+  });
 });
 
 describe("SourceCoordinator", () => {
