@@ -26,6 +26,9 @@ describe("readConfig", () => {
     ).toThrow();
     expect(readConfig({}, { density: "text" }).density).toBe("text");
     expect(() => readConfig({}, { density: "normal" })).toThrow("density");
+    expect(readConfig({}, {}).layout).toBe("fit");
+    expect(readConfig({}, { layout: "wrap" }).layout).toBe("wrap");
+    expect(() => readConfig({}, { layout: "wide" })).toThrow("layout must be fit or wrap");
   });
 });
 

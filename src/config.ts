@@ -1,5 +1,6 @@
 export type SymbolMode = "auto" | "unicode" | "ascii";
 export type DensityMode = "dense" | "text";
+export type LayoutMode = "fit" | "wrap";
 
 export interface BurndownConfig {
   broker?: { url: string; token: string };
@@ -10,6 +11,7 @@ export interface BurndownConfig {
   paceTolerance: number;
   symbols: SymbolMode;
   density: DensityMode;
+  layout: LayoutMode;
   showReset: boolean;
   clockSkewMs: number;
 }
@@ -19,6 +21,15 @@ function densityValue(pluginSettings: Readonly<Record<string, unknown>>): Densit
   if (configured === undefined) return "dense";
   if (configured !== "dense" && configured !== "text") {
     throw new Error("density must be dense or text");
+  }
+  return configured;
+}
+
+function layoutValue(pluginSettings: Readonly<Record<string, unknown>>): LayoutMode {
+  const configured = pluginSettings.layout;
+  if (configured === undefined) return "fit";
+  if (configured !== "fit" && configured !== "wrap") {
+    throw new Error("layout must be fit or wrap");
   }
   return configured;
 }
@@ -72,6 +83,7 @@ export function readConfig(
   }
 
   const density = densityValue(pluginSettings);
+  const layout = layoutValue(pluginSettings);
   const refreshSeconds = boundedNumber(
     env,
     "OMP_SUB_BURNDOWN_REFRESH_SECONDS",
@@ -115,6 +127,7 @@ export function readConfig(
     paceTolerance: tolerancePercent / 100,
     symbols,
     density,
+    layout,
     showReset: booleanValue(env, "OMP_SUB_BURNDOWN_SHOW_RESET", true),
     clockSkewMs: clockSkewSeconds * 1_000,
   };

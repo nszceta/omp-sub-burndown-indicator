@@ -176,6 +176,24 @@ object, then restart OMP:
 
 With the default compact output, `▼4 points behind` becomes `▼4pp`, retaining the direction glyph. The text setting restores `▼4 points behind`; ahead and on-pace signals likewise use `▲12pp` and `=0pp` in compact output or their full text forms when text is selected. Exhausted and unknown behavior, along with existing width fallback forms, is unchanged.
 
+Indicator layout is stored in the same runtime configuration file. The default
+`fit` layout keeps every subscription on one indicator line, degrading pace
+signals and dropping `% left` and reset details when width runs out. The
+`wrap` layout keeps full details and moves whole segments to subsequent
+indicator lines as width allows:
+
+```json
+{
+  "omp-sub-burndown-indicator": {
+    "layout": "wrap"
+  }
+}
+```
+
+A segment degrades to shorter forms only when its full form cannot fit an
+otherwise empty line; segments whose minimal form cannot fit the current width
+are still omitted. Risk ordering is unchanged.
+
 
 ## Symbols and ordering
 
