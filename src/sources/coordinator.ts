@@ -51,6 +51,7 @@ export function mergeSnapshots(groups: readonly SubscriptionSnapshot[][]): Subsc
         ...(accountId !== undefined ? { accountId } : {}),
         ...(tier !== undefined ? { tier } : {}),
         ...(accountLabel ? { accountLabel } : {}),
+        ...(existing.provisional || incoming.provisional ? { provisional: true } : {}),
         identitySource: identityIsStronger ? incoming.identitySource : existing.identitySource,
         limits: [...observations.values()].sort((a, b) =>
           observationKey(a).localeCompare(observationKey(b)),
@@ -58,7 +59,17 @@ export function mergeSnapshots(groups: readonly SubscriptionSnapshot[][]): Subsc
       });
     }
   }
-  return [...merged.values()].sort((a, b) => a.id.localeCompare(b.id));
+  const snapshots = [...merged.values()];
+  const identifiedProviders = new Set(
+    snapshots
+      .filter((snapshot) => snapshot.provisional !== true)
+      .map((snapshot) => snapshot.provider),
+  );
+  return snapshots
+    .filter(
+      (snapshot) => snapshot.provisional !== true || !identifiedProviders.has(snapshot.provider),
+    )
+    .sort((a, b) => a.id.localeCompare(b.id));
 }
 
 export class SourceCoordinator {

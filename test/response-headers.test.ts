@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { UsageLimit, UsageProvider, UsageReport } from "@oh-my-pi/pi-ai";
 import type { SubscriptionSnapshot } from "../src/domain/types.ts";
+import { mergeSnapshots } from "../src/sources/coordinator.ts";
 import { ResponseHeaderUsageSource } from "../src/sources/response-headers.ts";
 
 const limit = (usedFraction: number, resetsAt = 2_000): UsageLimit => ({
@@ -29,6 +30,18 @@ const authoritative = (id: string): SubscriptionSnapshot => ({
   identitySource: "omp-broker",
   limits: [],
 });
+
+const authStoragePlaceholder = (provider: string): SubscriptionSnapshot => {
+  const id = `provider:${provider}`;
+  return {
+    id,
+    provider,
+    accountId: id,
+    identitySource: "omp-auth-storage",
+    provisional: true,
+    limits: [],
+  };
+};
 
 describe("ResponseHeaderUsageSource", () => {
   test("normalizes headers and updates the one authoritative subscription", () => {
@@ -59,6 +72,34 @@ describe("ResponseHeaderUsageSource", () => {
       false,
     );
     expect(source.current()).toHaveLength(2);
+  });
+
+  test("does not retain coordinator-owned auth-storage placeholders across refreshes", () => {
+    const source = new ResponseHeaderUsageSource({ providers: [parser()] });
+    const placeholder = authStoragePlaceholder("demo");
+
+    source.setAuthoritativeSnapshots([placeholder]);
+    expect(source.current()).toEqual([]);
+
+    // Auth-storage placeholders belong to the coordinator and cannot outlive its refresh.
+    source.setAuthoritativeSnapshots([authoritative("demo:account:a")]);
+    expect(source.current()).toEqual([authoritative("demo:account:a")]);
+  });
+
+  test("keeps header data provisional when it shares an auth-storage placeholder ID", () => {
+    const source = new ResponseHeaderUsageSource({ providers: [parser()] });
+    const placeholder = authStoragePlaceholder("demo");
+    expect(source.ingest("demo", { "x-demo-used": "20", "x-demo-reset": "2000" }, 1_000)).toBe(
+      true,
+    );
+
+    const merged = mergeSnapshots([[placeholder], source.current()]);
+    expect(merged).toHaveLength(1);
+    source.setAuthoritativeSnapshots(merged);
+    expect(source.current()[0]?.identitySource).toBe("omp-response");
+
+    source.setAuthoritativeSnapshots([authoritative("demo:account:a")]);
+    expect(source.current().map((snapshot) => snapshot.id)).toEqual(["demo:account:a"]);
   });
 
   test("creates and preserves a provider-only snapshot from complete headers", () => {

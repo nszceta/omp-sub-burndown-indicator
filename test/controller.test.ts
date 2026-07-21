@@ -335,3 +335,46 @@ test("controller excludes providers disabled by OMP configuration", async () => 
     setDisabledProviders(disabledProviders);
   }
 });
+
+test("controller status includes auth-storage unattributable detail", async () => {
+  const usageReports: UsageReport[] = [
+    {
+      provider: "anthropic",
+      fetchedAt: now,
+      metadata: { accountLabel: "Claude" },
+      limits: [
+        {
+          id: "short",
+          label: "Short",
+          scope: { provider: "anthropic", windowId: "short" },
+          window: { id: "short", label: "Short", durationMs: 10_000, resetsAt: 15_000 },
+          amount: { unit: "percent", usedFraction: 0.4 },
+        },
+      ],
+    },
+    {
+      provider: "anthropic",
+      fetchedAt: now,
+      metadata: { accountLabel: "Claude" },
+      limits: [
+        {
+          id: "long",
+          label: "Long",
+          scope: { provider: "anthropic", windowId: "long" },
+          window: { id: "long", label: "Long", durationMs: 20_000, resetsAt: 25_000 },
+          amount: { unit: "percent", usedFraction: 0.2 },
+        },
+      ],
+    },
+  ];
+  const state: FakeUiState = { cleared: false, renders: 0 };
+  const ctx = fakeContext(state, true, usageReports);
+  const controller = new IndicatorController({ config, env: {}, now: () => now });
+
+  await controller.start(ctx);
+
+  expect(controller.status()).toContain(
+    "detail=2 usage report(s) cannot be attributed to a stable account; anthropic shown as unknown",
+  );
+  controller.shutdown(ctx);
+});

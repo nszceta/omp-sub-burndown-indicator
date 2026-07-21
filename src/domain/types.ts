@@ -21,6 +21,8 @@ export interface SubscriptionSnapshot {
   tier?: string;
   accountLabel?: string;
   identitySource: UsageSourceId;
+  /** Provider-level placeholder awaiting a stable account identity. */
+  provisional?: boolean;
   limits: LimitObservation[];
 }
 export type SegmentState = "ahead" | "on-pace" | "behind" | "exhausted" | "unknown";

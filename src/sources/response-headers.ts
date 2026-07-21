@@ -90,6 +90,7 @@ export class ResponseHeaderUsageSource implements UsageSource {
 
   setAuthoritativeSnapshots(snapshots: readonly SubscriptionSnapshot[]): void {
     const authoritative = snapshots
+      .filter((snapshot) => snapshot.provisional !== true)
       .filter(
         (snapshot) =>
           snapshot.identitySource === "omp-auth-storage" ||

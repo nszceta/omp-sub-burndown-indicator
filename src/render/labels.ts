@@ -9,6 +9,7 @@ const PROVIDER_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   "kimi-code": "Kimi Code",
   llamacpp: "llama.cpp",
   "openai-codex": "OpenAI Codex",
+  "opencode-go": "OpenCode Go",
   zai: "Z.ai",
 };
 
