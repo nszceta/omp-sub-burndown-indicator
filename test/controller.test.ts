@@ -19,6 +19,10 @@ const config: BurndownConfig = {
   density: "dense",
   layout: "fit",
   showReset: false,
+  accountLabels: "full",
+  exhaustedDisplay: "status",
+  exhaustedLabel: "full",
+  providerLabelMaxColumns: 0,
   clockSkewMs: 0,
 };
 

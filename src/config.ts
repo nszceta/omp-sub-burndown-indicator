@@ -1,6 +1,17 @@
 export type SymbolMode = "auto" | "unicode" | "ascii";
 export type DensityMode = "dense" | "text";
 export type LayoutMode = "fit" | "wrap";
+export type AccountLabelsMode = "full" | "masked" | "provider-only";
+export type ExhaustedDisplayMode = "status" | "reset";
+export type ExhaustedLabelMode = "full" | "symbol";
+export interface DisplaySettings {
+  density?: unknown;
+  layout?: unknown;
+  accountLabels?: unknown;
+  exhaustedDisplay?: unknown;
+  providerLabelMaxColumns?: unknown;
+  exhaustedLabel?: unknown;
+}
 
 export interface BurndownConfig {
   broker?: { url: string; token: string };
@@ -14,10 +25,19 @@ export interface BurndownConfig {
   layout: LayoutMode;
   showReset: boolean;
   clockSkewMs: number;
+  /** When set, only these provider IDs (lowercase) appear in the indicator. */
+  providerFilter?: ReadonlySet<string>;
+  accountLabels: AccountLabelsMode;
+  exhaustedDisplay: ExhaustedDisplayMode;
+  providerLabelMaxColumns: number;
+  exhaustedLabel: ExhaustedLabelMode;
 }
 
-function densityValue(pluginSettings: Readonly<Record<string, unknown>>): DensityMode {
-  const configured = pluginSettings.density;
+function densityValue(
+  env: Record<string, string | undefined>,
+  settings: DisplaySettings,
+): DensityMode {
+  const configured = env.OMP_SUB_BURNDOWN_DENSITY ?? settings.density;
   if (configured === undefined) return "dense";
   if (configured !== "dense" && configured !== "text") {
     throw new Error("density must be dense or text");
@@ -25,13 +45,70 @@ function densityValue(pluginSettings: Readonly<Record<string, unknown>>): Densit
   return configured;
 }
 
-function layoutValue(pluginSettings: Readonly<Record<string, unknown>>): LayoutMode {
-  const configured = pluginSettings.layout;
+function layoutValue(
+  env: Record<string, string | undefined>,
+  settings: DisplaySettings,
+): LayoutMode {
+  const configured = env.OMP_SUB_BURNDOWN_LAYOUT ?? settings.layout;
   if (configured === undefined) return "fit";
   if (configured !== "fit" && configured !== "wrap") {
     throw new Error("layout must be fit or wrap");
   }
   return configured;
+}
+
+function accountLabelsValue(
+  env: Record<string, string | undefined>,
+  settings: DisplaySettings,
+): AccountLabelsMode {
+  const configured = env.OMP_SUB_BURNDOWN_ACCOUNT_LABELS ?? settings.accountLabels;
+  if (configured === undefined) return "full";
+  if (configured !== "full" && configured !== "masked" && configured !== "provider-only") {
+    throw new Error("accountLabels must be full, masked, or provider-only");
+  }
+  return configured;
+}
+
+function exhaustedDisplayValue(
+  env: Record<string, string | undefined>,
+  settings: DisplaySettings,
+): ExhaustedDisplayMode {
+  const configured = env.OMP_SUB_BURNDOWN_EXHAUSTED_DISPLAY ?? settings.exhaustedDisplay;
+  if (configured === undefined) return "status";
+  if (configured !== "status" && configured !== "reset") {
+    throw new Error("exhaustedDisplay must be status or reset");
+  }
+  return configured;
+}
+
+function exhaustedLabelValue(
+  env: Record<string, string | undefined>,
+  settings: DisplaySettings,
+): ExhaustedLabelMode {
+  const configured = env.OMP_SUB_BURNDOWN_EXHAUSTED_LABEL ?? settings.exhaustedLabel;
+  if (configured === undefined) return "full";
+  if (configured !== "full" && configured !== "symbol") {
+    throw new Error("exhaustedLabel must be full or symbol");
+  }
+  return configured;
+}
+
+function providerLabelMaxColumnsValue(
+  env: Record<string, string | undefined>,
+  settings: DisplaySettings,
+): number {
+  const configured =
+    env.OMP_SUB_BURNDOWN_PROVIDER_LABEL_MAX_COLUMNS ?? settings.providerLabelMaxColumns;
+  if (configured === undefined) return 0;
+  const parsed = typeof configured === "number" ? configured : Number(configured);
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 256) {
+    const source =
+      env.OMP_SUB_BURNDOWN_PROVIDER_LABEL_MAX_COLUMNS !== undefined
+        ? "OMP_SUB_BURNDOWN_PROVIDER_LABEL_MAX_COLUMNS"
+        : "providerLabelMaxColumns";
+    throw new Error(`${source} must be an integer from 0 through 256`);
+  }
+  return parsed;
 }
 
 const DEFAULTS = {
@@ -72,7 +149,7 @@ function booleanValue(
 
 export function readConfig(
   env: Record<string, string | undefined> = process.env,
-  pluginSettings: Readonly<Record<string, unknown>> = {},
+  displaySettings: DisplaySettings = {},
 ): BurndownConfig {
   const brokerUrl = env.OMP_AUTH_BROKER_URL?.trim() ?? env.OMP_SUB_BURNDOWN_BROKER_URL?.trim();
   const brokerToken =
@@ -82,8 +159,12 @@ export function readConfig(
     throw new Error("OMP_SUB_BURNDOWN_SYMBOLS must be auto, unicode, or ascii");
   }
 
-  const density = densityValue(pluginSettings);
-  const layout = layoutValue(pluginSettings);
+  const density = densityValue(env, displaySettings);
+  const layout = layoutValue(env, displaySettings);
+  const accountLabels = accountLabelsValue(env, displaySettings);
+  const exhaustedDisplay = exhaustedDisplayValue(env, displaySettings);
+  const exhaustedLabel = exhaustedLabelValue(env, displaySettings);
+  const providerLabelMaxColumns = providerLabelMaxColumnsValue(env, displaySettings);
   const refreshSeconds = boundedNumber(
     env,
     "OMP_SUB_BURNDOWN_REFRESH_SECONDS",
@@ -120,6 +201,16 @@ export function readConfig(
     300,
   );
 
+  const providerFilterRaw = env.OMP_SUB_BURNDOWN_PROVIDERS?.trim();
+  const providerFilter = providerFilterRaw
+    ? new Set(
+        providerFilterRaw
+          .split(",")
+          .map((p) => p.trim().toLowerCase())
+          .filter(Boolean),
+      )
+    : undefined;
+
   const config: BurndownConfig = {
     refreshMs: refreshSeconds * 1_000,
     staleAfterMs: staleAfterSeconds * 1_000,
@@ -128,8 +219,13 @@ export function readConfig(
     symbols,
     density,
     layout,
+    accountLabels,
+    exhaustedDisplay,
+    exhaustedLabel,
+    providerLabelMaxColumns,
     showReset: booleanValue(env, "OMP_SUB_BURNDOWN_SHOW_RESET", true),
     clockSkewMs: clockSkewSeconds * 1_000,
+    ...(providerFilter ? { providerFilter } : {}),
   };
 
   if (brokerUrl && brokerToken) {
