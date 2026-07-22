@@ -1,5 +1,5 @@
-import type { BurndownSegment, SegmentState } from "../domain/types";
 import type { DensityMode } from "../config";
+import type { BurndownSegment, SegmentState } from "../domain/types";
 
 export type { DensityMode } from "../config";
 

@@ -53,6 +53,12 @@ function displayName(segment: LabelSegment): string {
   return clean(segment.label) || clean(segment.accountLabel) || clean(segment.provider) || "?";
 }
 
+/** Preserve a tiny account hint without disclosing the original label or domain. */
+export function maskAccountLabel(value: string): { head: string; tail: string } {
+  const localPart = clean(value).split("@", 1)[0] || "?";
+  return { head: [...localPart].slice(0, 3).join(""), tail: "***" };
+}
+
 /**
  * Allocate stable labels. Collisions are disambiguated in stable-id order, so
  * reordering a source response cannot change a subscription's label.

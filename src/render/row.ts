@@ -1,7 +1,19 @@
 import { visibleWidth } from "@oh-my-pi/pi-tui";
-import type { DensityMode, LayoutMode } from "../config";
+import type {
+  AccountLabelsMode,
+  DensityMode,
+  ExhaustedDisplayMode,
+  ExhaustedLabelMode,
+  LayoutMode,
+} from "../config";
 import type { BurndownSegment, SegmentState } from "../domain/types";
-import { buildStableLabels, labelFor, providerLabelFor, type StableLabels } from "./labels";
+import {
+  buildStableLabels,
+  labelFor,
+  maskAccountLabel,
+  providerLabelFor,
+  type StableLabels,
+} from "./labels";
 import {
   type BurndownSymbols,
   describeSegmentSignal,
@@ -20,6 +32,10 @@ export interface BurndownRenderOptions {
   symbols?: SymbolMode | BurndownSymbols;
   density?: DensityMode;
   layout?: LayoutMode;
+  accountLabels?: AccountLabelsMode;
+  exhaustedDisplay?: ExhaustedDisplayMode;
+  exhaustedLabel?: ExhaustedLabelMode;
+  providerLabelMaxColumns?: number;
   showReset?: boolean;
   now?: number | (() => number);
   separator?: string;
@@ -113,33 +129,68 @@ function remainingQuota(usedFraction: number | undefined): string {
   return `${Math.round(Math.max(0, 1 - usedFraction) * 100)}% left`;
 }
 
+function clipToColumns(text: string, maxColumns: number): string {
+  if (maxColumns === 0 || visibleWidth(text) <= maxColumns) return text;
+  if (maxColumns === 1) return "…";
+  let result = "";
+  for (const character of text) {
+    if (visibleWidth(`${result}${character}…`) > maxColumns) break;
+    result += character;
+  }
+  return `${result}…`;
+}
+
 function formsFor(
   segment: BurndownSegment,
   labels: StableLabels,
   symbols: BurndownSymbols,
   density: DensityMode,
+  accountLabels: AccountLabelsMode,
+  exhaustedDisplay: ExhaustedDisplayMode,
+  exhaustedLabel: ExhaustedLabelMode,
+  providerLabelMaxColumns: number,
   showReset: boolean,
   now: number,
   theme: BurndownTheme | undefined,
 ): RenderedForms {
   const color = colorFor(segment);
-  const fullSignal = style(theme, color, describeSegmentSignal(segment, symbols, density));
+  const fullSignal = style(
+    theme,
+    color,
+    exhaustedLabel === "symbol" && segment.state === "exhausted"
+      ? segmentSignal(segment, symbols)
+      : describeSegmentSignal(segment, symbols, density),
+  );
   const compactSignal = style(theme, color, segmentSignalWithUnit(segment, symbols));
   const minimalSignal = style(theme, color, segmentSignal(segment, symbols));
   const separator = " ";
-  const provider = providerLabelFor(labels, segment.subscriptionId);
+  const provider = clipToColumns(
+    providerLabelFor(labels, segment.subscriptionId),
+    providerLabelMaxColumns,
+  );
   const account = labelFor(labels, segment.subscriptionId);
   const hasDistinctAccount =
     labels.accountRequired.has(segment.subscriptionId) &&
     segment.label.trim().length > 0 &&
     segment.label.trim().toLocaleLowerCase() !== segment.provider.trim().toLocaleLowerCase();
-  const qualifiedLabel = hasDistinctAccount ? `${provider}:${account}` : provider;
+  const qualifiedLabel =
+    !hasDistinctAccount || accountLabels === "provider-only"
+      ? provider
+      : accountLabels === "masked"
+        ? (() => {
+            const { head, tail } = maskAccountLabel(account);
+            return `${provider}:${head}${tail}`;
+          })()
+        : `${provider}:${account}`;
   const fullLabel = style(theme, "muted", qualifiedLabel);
   const compact = `${fullLabel}${separator}${compactSignal}`;
   const minimal = `${fullLabel}${minimalSignal}`;
   const reset = showReset ? resetCountdown(segment.resetsAt, now) : "";
   const remaining = remainingQuota(segment.usedFraction);
-  const details = [remaining, reset].filter(Boolean);
+  const details =
+    segment.state === "exhausted" && exhaustedDisplay === "reset"
+      ? [reset].filter(Boolean)
+      : [remaining, reset].filter(Boolean);
   const full = details.length
     ? `${fullLabel}${separator}${fullSignal}${details
         .map((detail) => `${separator}·${separator}${style(theme, "dim", detail)}`)
@@ -238,6 +289,10 @@ export function renderBurndownRow(
       labels,
       symbols,
       options.density ?? "dense",
+      options.accountLabels ?? "full",
+      options.exhaustedDisplay ?? "status",
+      options.exhaustedLabel ?? "full",
+      options.providerLabelMaxColumns ?? 0,
       options.showReset ?? true,
       renderNow,
       options.theme,

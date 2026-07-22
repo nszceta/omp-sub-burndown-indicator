@@ -85,7 +85,7 @@ Independent quota tiers are separate subscriptions under their stable base accou
 
 The extension calls the public `ctx.modelRegistry.authStorage.fetchUsageReports()` API—the same normalized, cached report path used by OMP's built-in `/usage` command. No duplicate credentials or broker configuration are required. Account IDs and email labels come from OMP's normalized report metadata; credential values are never returned to the extension.
 
-A single report without account scope keeps the provisional `provider:<provider>` identity described below. When OMP returns several reports for one provider with no stable account identity—for example, multiple API-key credentials stored without account scope, as with OpenCode Go—usage cannot be attributed to a particular account. The provider then renders as one `Provider ? unknown` segment instead of being hidden, so the indicator never silently shows fewer subscriptions than `/usage`; `/burndown-status` reports how many reports were unattributable. The placeholder carries no measurements and is replaced as soon as an identified report or provisional header snapshot exists for the provider.
+A single report without account scope keeps the provisional `provider:<provider>` identity described below. When OMP returns several reports for one provider with no stable account identity—for example, multiple API-key credentials stored without account scope, as with OpenCode Go—usage cannot be attributed to a particular account. The provider then renders as one `Provider ? unknown` segment instead of being hidden, so the indicator never silently shows fewer subscriptions than `/usage`; `/burndown status` reports how many reports were unattributable. The placeholder carries no measurements and is replaced as soon as an identified report or provisional header snapshot exists for the provider.
 
 ### 2. OMP auth broker or gateway
 
@@ -157,42 +157,57 @@ A direct report must expose a stable account, project, organization, or explicit
 | `OMP_SUB_BURNDOWN_SYMBOLS` | `auto` | `auto`, `unicode`, or `ascii` |
 | `OMP_SUB_BURNDOWN_SHOW_RESET` | `true` | `true` or `false` |
 
-The environment variables in this table remain the configuration surface for refresh, source/transport, and other runtime and rendering options. Numeric and enum values are validated before I/O.
+Environment variables in this table configure refresh and source/transport behavior. Numeric and enum values are validated before I/O.
 
-Display density is stored only in OMP's user-wide plugin runtime configuration
-(normally `~/.omp/plugins/omp-plugins.lock.json`), never in an environment
-variable. Compact/dense output is the default. OMP's `plugin config` command
-does not currently address marketplace installs; to restore verbose text, add
-the following entry to the runtime configuration file's existing `settings`
-object, then restart OMP:
+### Display controls
 
-```json
-{
-  "omp-sub-burndown-indicator": {
-    "density": "text"
-  }
-}
+The extension owns its persistent display settings in `~/.omp/agent/burndown.yml`. This is intentionally separate from OMP's plugin runtime settings: OMP hosts the command, while the extension owns its display preferences.
+
+Use the `/burndown` command to update the file and immediately re-render the indicator:
+
+OMP completes the available subcommands and their valid values while you type.
+
+| Display override | Default | Accepted values |
+| --- | ---: | --- |
+| `OMP_SUB_BURNDOWN_DENSITY` | `dense` | `dense` or `text` |
+| `OMP_SUB_BURNDOWN_LAYOUT` | `fit` | `fit` or `wrap` |
+| `OMP_SUB_BURNDOWN_ACCOUNT_LABELS` | `full` | `full`, `masked`, or `provider-only` |
+| `OMP_SUB_BURNDOWN_EXHAUSTED_DISPLAY` | `status` | `status` or `reset` |
+| `OMP_SUB_BURNDOWN_EXHAUSTED_LABEL` | `full` | `full` or `symbol`; `symbol` renders `!` without `exhausted` |
+| `OMP_SUB_BURNDOWN_PROVIDER_LABEL_MAX_COLUMNS` | `0` | integer 0 through 256; `0` disables truncation |
+
+
+```text
+/burndown status
+/burndown labels full
+/burndown labels masked
+/burndown labels provider-only
+/burndown density dense
+/burndown density text
+/burndown layout fit
+/burndown layout wrap
+/burndown exhausted status
+/burndown exhausted reset
+/burndown exhausted label full
+/burndown exhausted label symbol
+/burndown provider truncate 8
+/burndown provider truncate 0
 ```
 
-With the default compact output, `▼4 points behind` becomes `▼4pp`, retaining the direction glyph. The text setting restores `▼4 points behind`; ahead and on-pace signals likewise use `▲12pp` and `=0pp` in compact output or their full text forms when text is selected. Exhausted and unknown behavior, along with existing width fallback forms, is unchanged.
+The first command writes all display values, preserving defaults for values you have not changed:
 
-Indicator layout is stored in the same runtime configuration file. The default
-`fit` layout keeps every subscription on one indicator line, degrading pace
-signals and dropping `% left` and reset details when width runs out. The
-`wrap` layout keeps full details and moves whole segments to subsequent
-indicator lines as width allows:
-
-```json
-{
-  "omp-sub-burndown-indicator": {
-    "layout": "wrap"
-  }
-}
+```yaml
+density: text
+layout: wrap
+accountLabels: masked
+exhaustedDisplay: reset
+exhaustedLabel: symbol
+providerLabelMaxColumns: 8
 ```
 
-A segment degrades to shorter forms only when its full form cannot fit an
-otherwise empty line; segments whose minimal form cannot fit the current width
-are still omitted. Risk ordering is unchanged.
+`masked` keeps a short local-part hint while removing the domain (`work@example.invalid` becomes `wor***`); `provider-only` hides the account identifier. `exhaustedDisplay: reset` omits the redundant remaining-quota text; `exhaustedLabel: symbol` renders exhausted subscriptions as `!` instead of `! exhausted`; `OMP_SUB_BURNDOWN_SHOW_RESET=false` still hides reset time. `providerLabelMaxColumns` caps provider labels in terminal columns and replaces the final column with `…`; set it to `0` (the default) to keep full provider names.
+
+At runtime, `OMP_SUB_BURNDOWN_DENSITY`, `OMP_SUB_BURNDOWN_LAYOUT`, `OMP_SUB_BURNDOWN_ACCOUNT_LABELS`, `OMP_SUB_BURNDOWN_EXHAUSTED_DISPLAY`, `OMP_SUB_BURNDOWN_EXHAUSTED_LABEL`, and `OMP_SUB_BURNDOWN_PROVIDER_LABEL_MAX_COLUMNS` override `burndown.yml` without modifying it. Valid values match the command forms above; the provider-label limit accepts whole numbers from `0` through `256`.
 
 
 ## Symbols and ordering
@@ -234,7 +249,7 @@ Provider names use complete readable brands (`Anthropic`, `OpenAI Codex`, `Googl
 Run:
 
 ```text
-/burndown-status
+/burndown status
 ```
 
 The command reports enabled sources, last successful refresh, error category, discovered providers, reported providers, and why a provider is unavailable. In a normal interactive OMP session, `omp-auth-storage` should be enabled and report the same providers as `/usage`. Tokens, authorization headers, raw error bodies, URL credentials, and provider secrets are never included.
@@ -268,7 +283,7 @@ Providers without an OMP usage adapter or a complete upstream quota window remai
 
 ### No row appears
 
-1. Run `/burndown-status`.
+1. Run `/burndown status`.
 2. Confirm a complete broker pair or one supported direct credential is present in the OMP process environment.
 3. Confirm the report has a finite reset timestamp, a positive duration, and resolvable used fraction.
 4. Remember that provider discovery from `ctx.models.list()` does not grant credential or quota access.
@@ -297,7 +312,7 @@ Manual interactive smoke test with OMP authenticated providers:
 
 1. Install or link the plugin.
 2. Start interactive `omp` and confirm the subscription indicator appears directly above the editor.
-3. Run `/usage`, then `/burndown-status`; confirm `omp-auth-storage` is enabled and the reported providers match eligible `/usage` providers.
+3. Run `/usage`, then `/burndown status`; confirm `omp-auth-storage` is enabled and the reported providers match eligible `/usage` providers.
 4. Resize to narrow and wide terminal widths; confirm complete segments remain whole, retain risk order, and move to subsequent indicator lines when needed; segments whose full-name minimal-signal form cannot fit are omitted rather than summarized by a hidden-count marker.
 5. Switch themes; confirm semantic glyphs remain readable with and without color.
 6. Change the fake or real usage response and confirm the indicator refreshes.

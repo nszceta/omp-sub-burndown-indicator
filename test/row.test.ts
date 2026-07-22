@@ -286,6 +286,57 @@ describe("burndown row", () => {
     ).toEqual([]);
   });
 
+  test("can omit account labels for privacy", () => {
+    const values = [
+      segment("account-a", "ahead", 0.1, {
+        provider: "anthropic",
+        label: "hi@adamgradzki.com",
+      }),
+      segment("account-b", "ahead", 0.1, {
+        provider: "anthropic",
+        label: "work@adamgradzki.com",
+      }),
+    ];
+    const rendered = renderBurndownRow(values, 100, {
+      now,
+      density: "text",
+      showReset: false,
+      accountLabels: "provider-only",
+      theme: identityTheme,
+    }).join("");
+    expect(rendered).toContain("Anthropic ▲10 points ahead");
+    expect(rendered).not.toContain("@");
+    expect(rendered).not.toContain(":");
+  });
+
+  test("masks account labels without leaking their domains", () => {
+    const rendered = renderBurndownRow(
+      [
+        segment("account-a", "ahead", 0.1, {
+          provider: "anthropic",
+          label: "hi@adamgradzki.com",
+        }),
+        segment("account-b", "ahead", 0.1, {
+          provider: "anthropic",
+          label: "work@adamgradzki.com",
+        }),
+      ],
+      100,
+      {
+        now,
+        density: "text",
+        showReset: false,
+        accountLabels: "masked",
+        theme: identityTheme,
+      },
+    ).join("");
+
+    expect(rendered).toContain("Anthropic:hi*** ▲10 points ahead");
+    expect(rendered).toContain("Anthropic:wor*** ▲10 points ahead");
+    expect(rendered).not.toContain("@");
+    expect(rendered).not.toContain("adamgradzki.com");
+  });
+
   test("marks true same-provider label collisions with an explicit ordinal", () => {
     const labels = buildStableLabels([
       segment("account-a", "ahead", 0.1, {
@@ -299,6 +350,53 @@ describe("burndown row", () => {
     ]);
     expect(labels.full.get("account-a")).toBe("hi@adamgradzki.com");
     expect(labels.full.get("account-b")).toBe("hi@adamgradzki.com#2");
+  });
+
+  test("clips provider names to the configured terminal-column limit", () => {
+    const value = segment("zread", "ahead", 0.1, {
+      provider: "zai-web-search-reader-zread",
+    });
+
+    const clipped = renderBurndownRow([value], 100, {
+      now,
+      density: "text",
+      showReset: false,
+      providerLabelMaxColumns: 8,
+      theme: identityTheme,
+    }).join("");
+    expect(clipped).toContain("Zai Web… ▲10 points ahead");
+    expect(visibleWidth("Zai Web…")).toBe(8);
+
+    const unlimited = renderBurndownRow([value], 100, {
+      now,
+      density: "text",
+      showReset: false,
+      providerLabelMaxColumns: 0,
+      theme: identityTheme,
+    }).join("");
+    expect(unlimited).toContain("Zai Web Search Reader Zread ▲10 points ahead");
+  });
+
+  test("renders a compact exhausted label when configured", () => {
+    const rendered = renderBurndownRow(
+      [
+        segment("exhausted", "exhausted", 0, {
+          provider: "anthropic",
+          resetsAt: now + 2 * 60 * 60_000,
+          usedFraction: 1,
+        }),
+      ],
+      100,
+      {
+        now,
+        density: "text",
+        exhaustedLabel: "symbol",
+        theme: identityTheme,
+      },
+    ).join("");
+
+    expect(rendered).toContain("Anthropic !");
+    expect(rendered).not.toContain("! exhausted");
   });
 
   test("component caches byte-identical output arrays", () => {

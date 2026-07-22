@@ -1,7 +1,7 @@
 import type { ProviderResponseMetadata } from "@oh-my-pi/pi-ai";
 import type { ExtensionContext } from "@oh-my-pi/pi-coding-agent";
 import { isProviderEnabled } from "@oh-my-pi/pi-coding-agent/capability";
-import { type BurndownConfig, readConfig, redact } from "../config.ts";
+import { type BurndownConfig, type DisplaySettings, readConfig, redact } from "../config.ts";
 import { computeBurndownSegments } from "../domain/burndown.ts";
 import type {
   BurndownSegment,
@@ -90,30 +90,24 @@ export class IndicatorController {
   }
 
   /** Start the current session. Repeated calls join the existing poller. */
-  async start(
-    ctx: ExtensionContext,
-    pluginSettings?: Readonly<Record<string, unknown>>,
-  ): Promise<void> {
+  async start(ctx: ExtensionContext, displaySettings?: DisplaySettings): Promise<void> {
     if (this.#disposed || !ctx.hasUI) return;
     if (this.#loop?.active && this.#ctx === ctx) {
       this.#setDiscoveredProviders(ctx);
       await this.#loop.trigger();
       return;
     }
-    await this.#activate(ctx, pluginSettings);
+    await this.#activate(ctx, displaySettings);
   }
 
   /** Abort the prior session generation and start exactly one new poller. */
-  async restart(
-    ctx: ExtensionContext,
-    pluginSettings?: Readonly<Record<string, unknown>>,
-  ): Promise<void> {
+  async restart(ctx: ExtensionContext, displaySettings?: DisplaySettings): Promise<void> {
     if (this.#disposed || !ctx.hasUI) {
       this.#stopWork();
       return;
     }
     this.#stopWork();
-    await this.#activate(ctx, pluginSettings);
+    await this.#activate(ctx, displaySettings);
   }
 
   /** Permanently shut down this controller and clear the widget. */
@@ -180,7 +174,7 @@ export class IndicatorController {
     };
   }
 
-  /** Human-readable output used by /burndown-status. It never contains credentials. */
+  /** Human-readable output used by /burndown status. It never contains credentials. */
   status(): string {
     const diagnostic = this.diagnostic();
     const sourceLines = diagnostic.sources.map((source) => {
@@ -210,18 +204,13 @@ export class IndicatorController {
     ].join("\n");
   }
 
-  async #activate(
-    ctx: ExtensionContext,
-    pluginSettings?: Readonly<Record<string, unknown>>,
-  ): Promise<void> {
+  async #activate(ctx: ExtensionContext, displaySettings?: DisplaySettings): Promise<void> {
     if (this.#disposed || !ctx.hasUI) return;
     this.#ctx = ctx;
     const generation = ++this.#generation;
     this.#configError = undefined;
     try {
-      this.#config =
-        this.#options.config ??
-        readConfig(this.#options.env, pluginSettings ?? this.#options.pluginSettings);
+      this.#config = this.#options.config ?? readConfig(this.#options.env, displaySettings);
     } catch (error) {
       this.#configError = errorText(error);
       this.#config = this.#options.config ?? readConfig({});
@@ -295,6 +284,10 @@ export class IndicatorController {
               symbols: this.#config?.symbols ?? "auto",
               density: this.#config?.density ?? "dense",
               layout: this.#config?.layout ?? "fit",
+              accountLabels: this.#config?.accountLabels ?? "full",
+              exhaustedDisplay: this.#config?.exhaustedDisplay ?? "status",
+              exhaustedLabel: this.#config?.exhaustedLabel ?? "full",
+              providerLabelMaxColumns: this.#config?.providerLabelMaxColumns ?? 0,
               showReset: this.#config?.showReset ?? true,
             });
             this.#component.setSegments(this.#lastSegments);
@@ -323,8 +316,11 @@ export class IndicatorController {
   #currentSnapshots(): SubscriptionSnapshot[] {
     const coordinatorSnapshots = this.#coordinator?.current() ?? [];
     const responseSnapshots = this.#responseSource?.current() ?? [];
-    return mergeSnapshots([coordinatorSnapshots, responseSnapshots]).filter((snapshot) =>
-      isProviderEnabled(snapshot.provider),
+    const providerFilter = this.#config?.providerFilter;
+    return mergeSnapshots([coordinatorSnapshots, responseSnapshots]).filter(
+      (snapshot) =>
+        isProviderEnabled(snapshot.provider) &&
+        (!providerFilter || providerFilter.has(snapshot.provider.toLowerCase())),
     );
   }
 
