@@ -6,7 +6,10 @@ import type { LimitObservation, SourceDiagnostic, SubscriptionSnapshot } from ".
 import { UsageSourceError } from "./source.ts";
 
 export interface OmpBrokerClient {
-  fetchUsage(signal?: AbortSignal): Promise<UsageResponse>;
+  fetchUsage(options?: {
+    signal?: AbortSignal;
+    maxAccountsPerProvider?: number;
+  }): Promise<UsageResponse>;
 }
 
 export interface OmpBrokerUsageSourceOptions {
@@ -159,7 +162,7 @@ export class OmpBrokerUsageSource {
     try {
       if (callerSignal.aborted)
         throw new UsageSourceError("aborted", "Broker usage refresh aborted");
-      const response = await client.fetchUsage(signal);
+      const response = await client.fetchUsage({ signal });
       const snapshots = this.#normalize(response);
       this.#lastGood = snapshots;
       this.#lastSuccessAt = this.#now();

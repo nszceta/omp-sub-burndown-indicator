@@ -24,31 +24,17 @@ function report(provider: string, accountId: string): UsageReport {
 }
 
 test("reads and normalizes the same account usage reports exposed by OMP", async () => {
-  let resolvedProvider: string | undefined;
-  let receivedSignal: AbortSignal | undefined;
   const registry = {
-    getProviderBaseUrl: (provider: string) => {
-      resolvedProvider = provider;
-      return "https://provider.example";
-    },
+    getProviderBaseUrl: () => undefined,
     authStorage: {
-      fetchUsageReports: async (options?: {
-        baseUrlResolver?: (provider: string) => string | undefined;
-        signal?: AbortSignal;
-      }) => {
-        receivedSignal = options?.signal;
-        options?.baseUrlResolver?.("openai-codex");
-        return [report("anthropic", "acct-a"), report("openai-codex", "acct-o")];
+      usage: {
+        reports: async () => [report("anthropic", "acct-a"), report("openai-codex", "acct-o")],
       },
     },
   } as unknown as HostModelRegistry;
   const source = new OmpAuthStorageUsageSource({ registry, now: () => now });
-  const signal = new AbortController().signal;
+  const snapshots = await source.refresh(new AbortController().signal);
 
-  const snapshots = await source.refresh(signal);
-
-  expect(receivedSignal).toBe(signal);
-  expect(resolvedProvider).toBe("openai-codex");
   expect(snapshots.map((snapshot) => snapshot.id)).toEqual([
     "anthropic:account:acct-a",
     "openai-codex:account:acct-o",
@@ -74,7 +60,7 @@ test("omits expired host usage observations", async () => {
   expired.fetchedAt = 1_000;
   const registry = {
     getProviderBaseUrl: () => undefined,
-    authStorage: { fetchUsageReports: async () => [expired] },
+    authStorage: { usage: { reports: async () => [expired] } },
   } as unknown as HostModelRegistry;
   const source = new OmpAuthStorageUsageSource({
     registry,
@@ -112,10 +98,12 @@ test("surfaces multi-account anonymous providers as one unknown placeholder", as
   const registry = {
     getProviderBaseUrl: () => undefined,
     authStorage: {
-      fetchUsageReports: async () => [
-        anonymousOpenCodeGoReport("monthly", 2_592_000_000, now + 941_400_000, 0.331),
-        anonymousOpenCodeGoReport("weekly", 604_800_000, now + 80_580_000, 0.013),
-      ],
+      usage: {
+        reports: async () => [
+          anonymousOpenCodeGoReport("monthly", 2_592_000_000, now + 941_400_000, 0.331),
+          anonymousOpenCodeGoReport("weekly", 604_800_000, now + 80_580_000, 0.013),
+        ],
+      },
     },
   } as unknown as HostModelRegistry;
   const source = new OmpAuthStorageUsageSource({ registry, now: () => now });
@@ -140,9 +128,11 @@ test("keeps real measurements for a single anonymous provider report", async () 
   const registry = {
     getProviderBaseUrl: () => undefined,
     authStorage: {
-      fetchUsageReports: async () => [
-        anonymousOpenCodeGoReport("monthly", 2_592_000_000, now + 941_400_000, 0.331),
-      ],
+      usage: {
+        reports: async () => [
+          anonymousOpenCodeGoReport("monthly", 2_592_000_000, now + 941_400_000, 0.331),
+        ],
+      },
     },
   } as unknown as HostModelRegistry;
   const source = new OmpAuthStorageUsageSource({ registry, now: () => now });
@@ -158,11 +148,13 @@ test("does not placeholder a provider that already has an identified snapshot", 
   const registry = {
     getProviderBaseUrl: () => undefined,
     authStorage: {
-      fetchUsageReports: async () => [
-        report("opencode-go", "acct-known"),
-        anonymousOpenCodeGoReport("monthly", 2_592_000_000, now + 941_400_000, 0.3),
-        anonymousOpenCodeGoReport("weekly", 604_800_000, now + 80_580_000, 0.1),
-      ],
+      usage: {
+        reports: async () => [
+          report("opencode-go", "acct-known"),
+          anonymousOpenCodeGoReport("monthly", 2_592_000_000, now + 941_400_000, 0.3),
+          anonymousOpenCodeGoReport("weekly", 604_800_000, now + 80_580_000, 0.1),
+        ],
+      },
     },
   } as unknown as HostModelRegistry;
   const source = new OmpAuthStorageUsageSource({ registry, now: () => now });

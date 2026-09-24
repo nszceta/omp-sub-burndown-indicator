@@ -121,7 +121,7 @@ function fakeContext(
       family: () => "claude",
     },
     modelRegistry: {
-      authStorage: { fetchUsageReports: async () => [...usageReports] },
+      authStorage: { usage: { reports: async () => [...usageReports] } },
       getProviderBaseUrl: () => undefined,
     },
     ui: {

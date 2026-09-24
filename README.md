@@ -35,7 +35,7 @@ Within a class, matching nominal windows prefer the limit furthest behind pace, 
 
 ## Requirements
 
-- OMP 16.4 or later
+- OMP >=18.3.0 and <19.0.0
 - Bun 1.3.14 or later
 - A supported usage source described below
 
@@ -77,8 +77,6 @@ For a one-session trial without installing:
 omp --extension ./src/index.ts
 ```
 
-Do not combine the trial command with `--no-extensions` on OMP 16.4: that version suppresses explicit extension paths despite older CLI help text stating otherwise.
-
 The package manifest declares:
 
 ```json
@@ -96,7 +94,16 @@ Independent quota tiers are separate subscriptions under their stable base accou
 
 ### 1. OMP authenticated usage (default)
 
-The extension calls the public `ctx.modelRegistry.authStorage.fetchUsageReports()` API—the same normalized, cached report path used by OMP's built-in `/usage` command. No duplicate credentials or broker configuration are required. Account IDs and email labels come from OMP's normalized report metadata; credential values are never returned to the extension.
+The extension calls the public `ctx.modelRegistry.authStorage.usage.reports()` API—the same normalized, cached report path used by OMP's built-in `/usage` command. It passes the provider base-URL resolver and refresh abort signal as options:
+
+```ts
+ctx.modelRegistry.authStorage.usage.reports({
+  baseUrlResolver: (provider) => ctx.modelRegistry.getProviderBaseUrl(provider),
+  signal,
+});
+```
+
+No duplicate credentials or broker configuration are required. Account IDs and email labels come from OMP's normalized report metadata; credential values are never returned to the extension.
 
 A single report without account scope keeps the provisional `provider:<provider>` identity described below. When OMP returns several reports for one provider with no stable account identity—for example, multiple API-key credentials stored without account scope, as with OpenCode Go—usage cannot be attributed to a particular account. The provider then renders as one `Provider ? unknown` segment instead of being hidden, so the indicator never silently shows fewer subscriptions than `/usage`; `/burndown status` reports how many reports were unattributable. The placeholder carries no measurements and is replaced as soon as an identified report or provisional header snapshot exists for the provider.
 
@@ -294,11 +301,10 @@ Every mutating command applies immediately and attempts to persist its setting t
 Restart OMP after installing or linking a new plugin version,
 because slash commands register only at extension load.
 
-
 ## Host modes
 
 - **Interactive OMP:** component-factory widget is rendered with `placement: "aboveEditor"`; resize-aware width and theme behavior are supported.
-- **RPC:** OMP 16.4 supports string-array widgets only, so this component widget is ignored safely.
+- **RPC:** Observed RPC widget support is limited to string-array widgets; this component-factory widget is ignored safely.
 - **ACP:** widget calls are stubbed by the host and produce no indicator.
 - **Print/headless/subagent:** `ctx.hasUI` is false; the extension does not start rendering or source refresh work.
 

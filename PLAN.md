@@ -38,12 +38,12 @@ The plan must preserve these host boundaries:
 1. OMP extensions are TS/JS default-exported factories registered through `ExtensionAPI` from `@oh-my-pi/pi-coding-agent`.
 2. Installed packages declare extension entry points through `package.json` → `omp.extensions`.
 3. Interactive OMP supports `setWidget` above or below the editor. `setHeader` and `setFooter` are no-ops and are not valid alternatives.
-4. RPC supports string-array widgets but not component-factory widgets. ACP stubs widgets out; headless/subagent contexts have no usable UI. Exact `aboveEditor` placement is therefore guaranteed only by interactive OMP.
+4. Observed RPC widget support is limited to string-array widgets; component-factory widgets are not rendered. ACP stubs widgets out; headless/subagent contexts have no usable UI. Exact `placement: "aboveEditor"` is therefore guaranteed only by interactive OMP.
 5. `ctx.models.list()` exposes authenticated models and `ctx.models.current()` exposes the current model. Neither exposes subscription usage windows.
 6. `ctx.getContextUsage()` reports model context-window use, not account/subscription quotas, and must not be used for this feature.
 7. `after_provider_response` exposes response status, headers, and request ID. It does not identify an account and does not directly provide a normalized subscription usage report.
 8. OMP’s public `@oh-my-pi/pi-ai` package exports provider-agnostic `UsageReport`, `UsageLimit`, `UsageWindow`, `resolveUsedFraction`, provider usage adapters, and broker client support.
-9. `ctx.modelRegistry.authStorage.fetchUsageReports()` is a public, read-only normalized usage API and is the same cached report path used by OMP’s built-in `/usage` command.
+9. `ctx.modelRegistry.authStorage.usage.reports({ baseUrlResolver, signal })` is a public, read-only normalized usage API and is the same cached report path used by OMP’s built-in `/usage` command.
 10. An OMP auth broker or auth gateway also exposes authenticated `GET /v1/usage`, returning normalized usage reports.
 11. The plugin must never import coding-agent internals, open `agent.db`, inspect auth cache files, read credential values, or patch OMP.
 
@@ -87,7 +87,7 @@ Reference contracts used during implementation:
 
 A complete “each subscription” view is possible without private OMP access when at least one public source identifies the subscription/account and its limit windows:
 
-1. `ctx.modelRegistry.authStorage.fetchUsageReports()`, the default OMP-auth source;
+1. `ctx.modelRegistry.authStorage.usage.reports({ baseUrlResolver, signal })`, the default OMP-auth source;
 2. configured OMP auth broker/gateway `/v1/usage`;
 3. a supported provider usage endpoint with credentials explicitly supplied to the plugin; or
 4. response rate-limit headers containing enough provider/window data to normalize safely.
@@ -203,7 +203,7 @@ interface UsageSource {
 
 ### Source 1: OMP authenticated usage — preferred
 
-`OmpAuthStorageUsageSource` calls the public `ctx.modelRegistry.authStorage.fetchUsageReports()` API with the registry’s provider base-URL resolver and refresh abort signal. It normalizes the same cached, account-identified reports displayed by `/usage`, never receives credential values, and has the strongest identity precedence.
+`OmpAuthStorageUsageSource` calls the public `ctx.modelRegistry.authStorage.usage.reports({ baseUrlResolver, signal })` API with the registry’s provider base-URL resolver and refresh abort signal. It normalizes the same cached, account-identified reports displayed by `/usage`, never receives credential values, and has the strongest identity precedence.
 
 ### Source 2: OMP broker/gateway
 
@@ -212,7 +212,7 @@ interface UsageSource {
 - Read broker/gateway URL and bearer token from environment configuration.
 - Prefer existing OMP environment names when present: `OMP_AUTH_BROKER_URL` and `OMP_AUTH_BROKER_TOKEN`.
 - Call only the documented read-only `GET /v1/usage` endpoint.
-- Use `AuthBrokerClient.fetchUsage(signal)` and the public `UsageResponse`/`usageResponseSchema` from `@oh-my-pi/pi-ai` when available; otherwise implement the small HTTP call and validate the same `{ generatedAt, reports: UsageReport[] }` envelope before reading `.reports`. Track `generatedAt` only as broker response time; preserve each `report.fetchedAt` as the measurement timestamp used for merging and staleness. Never depend on the broker-stripped `UsageReport.raw` field.
+- Use `AuthBrokerClient.fetchUsage({ signal })` with the public `UsageResponse`/`usageResponseSchema` from `@oh-my-pi/pi-ai`; validate the `{ generatedAt, reports: UsageReport[] }` envelope before reading `.reports`. Track `generatedAt` only as broker response time; preserve each `report.fetchedAt` as the measurement timestamp used for merging and staleness. Never depend on the broker-stripped `UsageReport.raw` field.
 - Apply an abortable timeout.
 - Respect broker caching; do not poll more frequently than the configured minimum.
 - Preserve last-good reports on transient timeout, network, 429, and 5xx failures; mark them stale.
@@ -325,7 +325,7 @@ ctx.ui.setWidget(WIDGET_KEY, (_tui, theme) => new BurndownRowComponent(theme), {
 });
 ```
 
-`BurndownRowComponent.render(width)` receives the current host width and returns exactly zero or one rendered line. This provides resize-aware, cell-accurate degradation in interactive OMP without touching status-line internals. RPC supports only string-array widgets and ACP stubs widgets, so these modes must degrade to no indicator without throwing; headless/subagent contexts also render nothing.
+`BurndownRowComponent.render(width)` receives the current host width and returns exactly zero or one rendered line. This provides resize-aware, cell-accurate degradation in interactive OMP without touching status-line internals. Observed RPC widget support is limited to string-array widgets and ACP stubs widgets, so these modes must degrade to no indicator without throwing; headless/subagent contexts also render nothing.
 
 ### Segment forms
 

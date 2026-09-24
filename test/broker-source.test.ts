@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { UsageResponse } from "@oh-my-pi/pi-ai";
-import { OmpBrokerUsageSource } from "../src/sources/omp-broker.ts";
+import { type OmpBrokerClient, OmpBrokerUsageSource } from "../src/sources/omp-broker.ts";
 import { UsageSourceError } from "../src/sources/source.ts";
 
 const token = "broker-secret-token";
@@ -106,22 +106,49 @@ describe("OmpBrokerUsageSource", () => {
     });
   }
 
-  test("composes timeout and caller abort", async () => {
-    const { server, url } = await serve(async () => {
-      await Bun.sleep(100);
+  test("composes timeout and caller abort through the underlying HTTP request", async () => {
+    const requestWaiters: Array<(request: Request) => void> = [];
+    const waitForRequest = () => new Promise<Request>((resolve) => requestWaiters.push(resolve));
+    const { server, url } = await serve(async (request) => {
+      requestWaiters.shift()?.(request);
+      await Promise.race([
+        Bun.sleep(250),
+        new Promise<void>((resolve) => {
+          if (request.signal.aborted) resolve();
+          else request.signal.addEventListener("abort", () => resolve(), { once: true });
+        }),
+      ]);
       return Response.json(response());
     });
+    const client: OmpBrokerClient = {
+      async fetchUsage(options) {
+        const result = await fetch(url, options?.signal ? { signal: options.signal } : {});
+        return (await result.json()) as UsageResponse;
+      },
+    };
+    const broker = (timeoutMs: number) => new OmpBrokerUsageSource({ client, timeoutMs });
     try {
-      const timed = await source(url, { timeoutMs: 10 })
+      const timeoutRequestPromise = waitForRequest();
+      const timeoutRefresh = broker(100)
         .refresh(new AbortController().signal)
         .catch((value) => value);
+      const timeoutRequest = await timeoutRequestPromise;
+      const timed = await timeoutRefresh;
+      expect(timed).toBeInstanceOf(UsageSourceError);
       expect((timed as UsageSourceError).category).toBe("timeout");
+      expect(timeoutRequest.signal.aborted).toBe(true);
 
       const controller = new AbortController();
-      const abortedPromise = source(url, { timeoutMs: 1_000 }).refresh(controller.signal);
+      const callerRequestPromise = waitForRequest();
+      const abortedPromise = broker(1_000)
+        .refresh(controller.signal)
+        .catch((value) => value);
+      const callerRequest = await callerRequestPromise;
       controller.abort();
-      const aborted = await abortedPromise.catch((value) => value);
+      const aborted = await abortedPromise;
+      expect(aborted).toBeInstanceOf(UsageSourceError);
       expect((aborted as UsageSourceError).category).toBe("aborted");
+      expect(callerRequest.signal.aborted).toBe(true);
     } finally {
       server.stop(true);
     }

@@ -36,7 +36,7 @@ export class OmpAuthStorageUsageSource implements UsageSource {
     try {
       if (signal.aborted) throw new UsageSourceError("aborted", "OMP auth usage refresh aborted");
       const reports =
-        (await this.#registry.authStorage.fetchUsageReports({
+        (await this.#registry.authStorage.usage.reports({
           baseUrlResolver: (provider) => this.#registry.getProviderBaseUrl(provider),
           signal,
         })) ?? [];
