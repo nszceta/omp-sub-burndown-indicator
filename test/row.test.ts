@@ -530,4 +530,48 @@ describe("burndown row", () => {
     expect(lines).toEqual(["Alpha ▲12"]);
     expect(visibleWidth(lines[0] ?? "")).toBeLessThanOrEqual(9);
   });
+
+  test("describes a native wrapping row of whole, keyed segments for Tern", () => {
+    const codex = segment("codex", "ahead", 0.01, {
+      provider: "openai-codex",
+      label: "OpenAI Codex",
+      windowId: "5h",
+      windowLabel: "5h",
+      usedFraction: 0,
+      resetsAt: now + 4 * 60 * 60_000 + 57 * 60_000,
+    });
+    const go = segment("go", "behind", -0.2, {
+      provider: "opencode-go",
+      label: "OpenCode Go",
+      windowId: "wk",
+      windowLabel: "Wk",
+      usedFraction: 0.5,
+    });
+    const fit = new BurndownRowComponent(identityTheme, { now, density: "text" });
+    fit.setSegments([codex, go]);
+    const node = fit.describe();
+    expect(node.c?.map((child) => child.k)).toEqual(["row", "spacer"]);
+    const segmentsRow = node.c?.[0];
+    expect(segmentsRow?.p).toMatchObject({ wrap: true });
+    const children = segmentsRow?.c ?? [];
+    expect(children.map((child) => child.k)).toEqual(["text", "text"]);
+    for (const child of children) expect(child.p).toMatchObject({ wrap: "none" });
+    const keys = children.map((child) => child.key);
+    expect(new Set(keys).size).toBe(2);
+    const codexChild = children.find((child) =>
+      String(child.p?.title).startsWith("OpenAI Codex 5h"),
+    );
+    expect(codexChild?.p?.title).toBe("OpenAI Codex 5h ▲1 points ahead · 100% left · 4h57m");
+    expect(codexChild?.p?.spans).toContainEqual({ t: "▲1 points", s: "success" });
+    expect(fit.describe()).toBe(node);
+
+    const wrap = new BurndownRowComponent(identityTheme, { now, density: "text", layout: "wrap" });
+    wrap.setSegments([codex, go]);
+    const wrapped = wrap.describe().c?.[0]?.c ?? [];
+    expect(wrapped.map((child) => child.key).sort()).toEqual([...keys].sort());
+    expect(wrapped.every((child) => child.p?.title === undefined)).toBe(true);
+
+    const empty = new BurndownRowComponent(identityTheme, { now });
+    expect(empty.describe().p).toMatchObject({ hidden: true });
+  });
 });

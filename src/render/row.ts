@@ -188,6 +188,18 @@ interface RenderedForms {
   minimal: string;
 }
 
+/** One run of segment text and the theme colour it is drawn with. */
+interface Part {
+  readonly t: string;
+  readonly color?: string;
+}
+
+interface FormParts {
+  full: readonly Part[];
+  compact: readonly Part[];
+  minimal: readonly Part[];
+}
+
 function remainingQuota(usedFraction: number | undefined): string {
   if (usedFraction === undefined || !Number.isFinite(usedFraction)) return "";
   return `${Math.round(Math.max(0, 1 - usedFraction) * 100)}% left`;
@@ -204,7 +216,7 @@ function clipToColumns(text: string, maxColumns: number): string {
   return `${result}…`;
 }
 
-function formsFor(
+function partsFor(
   segment: BurndownSegment,
   labels: StableLabels,
   symbols: BurndownSymbols,
@@ -215,8 +227,7 @@ function formsFor(
   providerLabelMaxColumns: number,
   showReset: boolean,
   now: number,
-  theme: BurndownTheme | undefined,
-): RenderedForms {
+): FormParts {
   const color = colorFor(segment);
   const remaining = remainingQuota(segment.usedFraction);
   const reset = showReset ? resetCountdown(segment.resetsAt, now) : "";
@@ -226,17 +237,11 @@ function formsFor(
   const omitPaceGlyph = segment.state === "unknown" && !segment.stale && paceDetails.length > 0;
   const fullSignal = omitPaceGlyph
     ? ""
-    : style(
-        theme,
-        color,
-        exhaustedLabel === "symbol" && segment.state === "exhausted"
-          ? segmentSignal(segment, symbols)
-          : describeSegmentSignal(segment, symbols, density),
-      );
-  const compactSignal = omitPaceGlyph
-    ? ""
-    : style(theme, color, segmentSignalWithDensity(segment, symbols, density));
-  const minimalSignal = omitPaceGlyph ? "" : style(theme, color, segmentSignal(segment, symbols));
+    : exhaustedLabel === "symbol" && segment.state === "exhausted"
+      ? segmentSignal(segment, symbols)
+      : describeSegmentSignal(segment, symbols, density);
+  const compactSignal = omitPaceGlyph ? "" : segmentSignalWithDensity(segment, symbols, density);
+  const minimalSignal = omitPaceGlyph ? "" : segmentSignal(segment, symbols);
   const separator = " ";
   const provider = clipToColumns(
     providerLabelFor(labels, segment.subscriptionId),
@@ -251,21 +256,55 @@ function formsFor(
   const branded = windowSuffix ? `${provider} ${windowSuffix}` : provider;
   const qualifiedLabel =
     !hasDistinctAccount || accountLabels === "provider-only" ? branded : `${branded}:${account}`;
-  const fullLabel = style(theme, "muted", qualifiedLabel);
-  const withSignal = (signal: string): string =>
-    signal ? `${fullLabel}${separator}${signal}` : fullLabel;
-  const compact = withSignal(compactSignal);
-  const minimal = withSignal(minimalSignal);
+  const label: Part = { t: qualifiedLabel, color: "muted" };
+  const withSignal = (signal: string): Part[] =>
+    signal ? [label, { t: separator }, { t: signal, color }] : [label];
   const details =
     segment.state === "exhausted" && exhaustedDisplay === "reset"
       ? [reset].filter(Boolean)
       : [remaining, reset].filter(Boolean);
-  const full = details.length
-    ? `${withSignal(fullSignal)}${details
-        .map((detail) => `${separator}·${separator}${style(theme, "dim", detail)}`)
-        .join("")}`
-    : withSignal(fullSignal);
-  return { full, compact, minimal };
+  const full = [
+    ...withSignal(fullSignal),
+    ...details.flatMap((detail): Part[] => [
+      { t: `${separator}·${separator}` },
+      { t: detail, color: "dim" },
+    ]),
+  ];
+  return { full, compact: withSignal(compactSignal), minimal: withSignal(minimalSignal) };
+}
+
+function styleParts(parts: readonly Part[], theme: BurndownTheme | undefined): string {
+  return parts.map((part) => (part.color ? style(theme, part.color, part.t) : part.t)).join("");
+}
+
+/** Segment parts in display order, each keyed by its subscription window for native reconciliation. */
+function segmentParts(
+  segments: readonly BurndownSegment[],
+  options: BurndownRenderOptions,
+): Array<{ key: string; parts: FormParts }> {
+  const symbols =
+    typeof options.symbols === "object" ? options.symbols : symbolsFor(options.symbols ?? "auto");
+  const sorted = sortBurndownSegments(segments);
+  const labels = buildStableLabels(sorted, options.accountLabels === "masked");
+  const renderNow = nowValue(options.now);
+  return sorted.map((segment) => ({
+    // Native keys join into `/` keypaths, so the identity is hashed.
+    key: Bun.hash(
+      `${segment.subscriptionId}\0${segment.windowId ?? segment.windowLabel ?? ""}`,
+    ).toString(36),
+    parts: partsFor(
+      segment,
+      labels,
+      symbols,
+      options.density ?? "dense",
+      options.accountLabels ?? "full",
+      options.exhaustedDisplay ?? "status",
+      options.exhaustedLabel ?? "full",
+      options.providerLabelMaxColumns ?? 0,
+      options.showReset ?? true,
+      renderNow,
+    ),
+  }));
 }
 
 /**
@@ -394,33 +433,64 @@ export function renderBurndownRow(
   // passed to render(); keep a 1-cell margin so lines are not mid-wrapped.
   const budget = Math.max(0, Math.floor(width) - 1);
   if (budget <= 0 || segments.length === 0) return EMPTY_ROWS;
-  const symbols =
-    typeof options.symbols === "object" ? options.symbols : symbolsFor(options.symbols ?? "auto");
   const separator = options.separator ?? DEFAULT_SEPARATOR;
-  const sorted = sortBurndownSegments(segments);
-  const labels = buildStableLabels(sorted, options.accountLabels === "masked");
-  const renderNow = nowValue(options.now);
-  const forms = sorted.map((segment) =>
-    formsFor(
-      segment,
-      labels,
-      symbols,
-      options.density ?? "dense",
-      options.accountLabels ?? "full",
-      options.exhaustedDisplay ?? "status",
-      options.exhaustedLabel ?? "full",
-      options.providerLabelMaxColumns ?? 0,
-      options.showReset ?? true,
-      renderNow,
-      options.theme,
-    ),
-  );
+  const forms = segmentParts(segments, options).map(({ parts }) => ({
+    full: styleParts(parts.full, options.theme),
+    compact: styleParts(parts.compact, options.theme),
+    minimal: styleParts(parts.minimal, options.theme),
+  }));
   const renderable = forms.filter((form) => visibleWidth(form.minimal) <= budget);
   const lines =
     options.layout === "wrap"
       ? packForms(renderable, budget, separator)
       : fitForms(renderable, budget, separator);
   return lines.length > 0 ? lines : EMPTY_ROWS;
+}
+
+/**
+ * A Tern Surface Protocol node: a wire node minus its id. Typed structurally
+ * because the supported OMP range does not export the native describe types.
+ */
+export interface BurndownNativeNode {
+  readonly k: string;
+  readonly p?: Readonly<Record<string, unknown>>;
+  readonly c?: readonly BurndownNativeNode[];
+  readonly key?: string;
+}
+
+const HIDDEN_NODE: BurndownNativeNode = { k: "col", p: { hidden: true } };
+
+/**
+ * Describe the segments for a native (Tern) surface: one wrapping row of
+ * unbreakable segment runs the terminal lays out at its own width, so
+ * segments move to the next line whole instead of being clipped. `fit`
+ * shows the compact form with the full detail as the hover title; `wrap`
+ * shows the full form.
+ */
+export function describeBurndownRow(
+  segments: readonly BurndownSegment[],
+  options: Omit<BurndownRenderOptions, "theme"> = {},
+): BurndownNativeNode {
+  if (segments.length === 0) return HIDDEN_NODE;
+  const full = options.layout === "wrap";
+  const children = segmentParts(segments, options).map(({ key, parts }) => {
+    const shown = full ? parts.full : parts.compact;
+    const spans = shown.map((part) => (part.color ? { t: part.t, s: part.color } : { t: part.t }));
+    const props: Record<string, unknown> = { spans, wrap: "none" };
+    if (!full) props.title = parts.full.map((part) => part.t).join("");
+    return { k: "text", p: props, key };
+  });
+  // Tern floats the composer's context-meter labels (`12%`, `1M`) above its
+  // top edge; a one-row gap keeps them off the segments when this widget sits
+  // directly above the editor with nothing else in the dock between.
+  return {
+    k: "col",
+    p: { role: "omp.burndown" },
+    c: [
+      { k: "row", p: { wrap: true, gap: "md" }, c: children, key: "segments" },
+      { k: "spacer", p: { size: "md" }, key: "gap" },
+    ],
+  };
 }
 
 export class BurndownRowComponent {
@@ -431,6 +501,8 @@ export class BurndownRowComponent {
   #cachedWidth: number | undefined;
   #cachedNow: number | undefined;
   #cachedRows: readonly string[] = EMPTY_ROWS;
+  #native: BurndownNativeNode = HIDDEN_NODE;
+  #nativeKey = "";
 
   constructor(theme?: BurndownTheme, options: Omit<BurndownRenderOptions, "theme"> = {}) {
     this.theme = theme;
@@ -456,5 +528,24 @@ export class BurndownRowComponent {
     this.#cachedWidth = width;
     this.#cachedNow = currentNow;
     return this.#cachedRows;
+  }
+
+  /**
+   * Tern Surface Protocol entry point; without it the host falls back to
+   * `render()` rows at the terminal width, which Tern clips under its chrome.
+   * Returns the previous node object when nothing visible changed so the
+   * reconciler can skip it.
+   */
+  describe(): BurndownNativeNode {
+    const next = describeBurndownRow(this.#segments, {
+      ...this.options,
+      now: nowValue(this.options.now),
+    });
+    const key = JSON.stringify(next);
+    if (key !== this.#nativeKey) {
+      this.#native = next;
+      this.#nativeKey = key;
+    }
+    return this.#native;
   }
 }

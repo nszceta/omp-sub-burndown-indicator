@@ -304,6 +304,7 @@ because slash commands register only at extension load.
 ## Host modes
 
 - **Interactive OMP:** component-factory widget is rendered with `placement: "aboveEditor"`; resize-aware width and theme behavior are supported.
+- **Tern (Tern Surface Protocol):** the widget describes itself natively (`describe()`): one wrapping row with one unbreakable text run per segment, laid out by Tern at its own width, followed by a gap so the composer's context-meter labels floating above its top edge don't overlap the segments. `fit` shows the compact form, with the full detail as the hover tooltip; `wrap` shows the full form. The ANSI `render()` rows are not used there.
 - **RPC:** Observed RPC widget support is limited to string-array widgets; this component-factory widget is ignored safely.
 - **ACP:** widget calls are stubbed by the host and produce no indicator.
 - **Print/headless/subagent:** `ctx.hasUI` is false; the extension does not start rendering or source refresh work.
