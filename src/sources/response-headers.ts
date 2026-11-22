@@ -1,33 +1,13 @@
-import {
-  antigravityUsageProvider,
-  claudeUsageProvider,
-  githubCopilotUsageProvider,
-  googleGeminiCliUsageProvider,
-  kimiUsageProvider,
-  openaiCodexUsageProvider,
-  resolveUsedFraction,
-  type UsageLimit,
-  type UsageProvider,
-  zaiUsageProvider,
-} from "@oh-my-pi/pi-ai";
+import { resolveUsedFraction, type UsageLimit, type UsageProvider } from "@oh-my-pi/pi-ai";
 import { normalizeUsageReport } from "../domain/normalize.ts";
 import type { LimitObservation, SubscriptionSnapshot } from "../domain/types.ts";
 import type { UsageSource } from "./source.ts";
+import { DEFAULT_USAGE_PROVIDERS } from "./usage-providers.ts";
 
 export interface ResponseHeaderUsageSourceOptions {
   providers?: readonly UsageProvider[];
   parsers?: ReadonlyMap<string, UsageProvider["parseRateLimitHeaders"]>;
 }
-
-const DEFAULT_PROVIDERS: readonly UsageProvider[] = [
-  claudeUsageProvider,
-  googleGeminiCliUsageProvider,
-  githubCopilotUsageProvider,
-  antigravityUsageProvider,
-  kimiUsageProvider,
-  openaiCodexUsageProvider,
-  zaiUsageProvider,
-];
 
 function normalizeHeaders(
   headers: Headers | Record<string, string | readonly string[]>,
@@ -78,7 +58,7 @@ export class ResponseHeaderUsageSource implements UsageSource {
 
   constructor(options: ResponseHeaderUsageSourceOptions = {}) {
     const parsers = new Map<string, UsageProvider["parseRateLimitHeaders"]>();
-    for (const provider of options.providers ?? DEFAULT_PROVIDERS) {
+    for (const provider of options.providers ?? DEFAULT_USAGE_PROVIDERS) {
       if (provider.parseRateLimitHeaders)
         parsers.set(provider.id, provider.parseRateLimitHeaders.bind(provider));
     }

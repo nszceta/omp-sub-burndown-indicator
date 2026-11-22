@@ -1,19 +1,13 @@
-import {
-  antigravityUsageProvider,
-  claudeUsageProvider,
-  githubCopilotUsageProvider,
-  googleGeminiCliUsageProvider,
-  kimiUsageProvider,
-  openaiCodexUsageProvider,
-  type UsageCredential,
-  type UsageFetchParams,
-  type UsageProvider,
-  type UsageReport,
-  zaiUsageProvider,
+import type {
+  UsageCredential,
+  UsageFetchParams,
+  UsageProvider,
+  UsageReport,
 } from "@oh-my-pi/pi-ai";
 import type { SubscriptionSnapshot } from "../domain/types.ts";
 import type { UsageSource } from "./source.ts";
 import { UsageSourceError } from "./source.ts";
+import { DEFAULT_USAGE_PROVIDERS } from "./usage-providers.ts";
 
 export interface ProviderEndpointCredential {
   provider: string;
@@ -117,16 +111,6 @@ export const PROVIDER_CREDENTIAL_ENVIRONMENT: readonly ProviderCredentialEnviron
     variables: ["OMP_SUB_BURNDOWN_ZAI_API_KEY", "OMP_SUB_BURNDOWN_ZAI_KEY"],
     baseUrlVariables: ["OMP_SUB_BURNDOWN_ZAI_BASE_URL"],
   },
-];
-
-const DEFAULT_ADAPTERS: readonly UsageProvider[] = [
-  claudeUsageProvider,
-  googleGeminiCliUsageProvider,
-  githubCopilotUsageProvider,
-  antigravityUsageProvider,
-  kimiUsageProvider,
-  openaiCodexUsageProvider,
-  zaiUsageProvider,
 ];
 
 function cloneSnapshot(
@@ -233,7 +217,7 @@ export class ProviderEndpointUsageSource implements UsageSource {
     this.#timeoutMs = Math.max(1, options.timeoutMs ?? 15_000);
     this.#now = options.now ?? Date.now;
     this.#staleAfterMs = Math.max(this.#timeoutMs, options.staleAfterMs ?? 1_800_000);
-    const adapters = options.adapters ?? options.registry ?? DEFAULT_ADAPTERS;
+    const adapters = options.adapters ?? options.registry ?? DEFAULT_USAGE_PROVIDERS;
     this.#adapters = new Map(adapters.map((adapter) => [adapter.id, adapter]));
     this.#providers = options.providers
       ? [...new Set(options.providers.filter(Boolean))]
@@ -420,4 +404,4 @@ export const SUPPORTED_PROVIDER_ENDPOINTS = PROVIDER_CREDENTIAL_ENVIRONMENT.map(
   (spec) => spec.provider,
 );
 
-export const PUBLIC_USAGE_ADAPTERS: readonly UsageProvider[] = DEFAULT_ADAPTERS;
+export const PUBLIC_USAGE_ADAPTERS: readonly UsageProvider[] = DEFAULT_USAGE_PROVIDERS;

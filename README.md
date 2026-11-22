@@ -146,7 +146,7 @@ Direct provider probes are opt-in. They use public `UsageProvider.fetchUsage` ad
 | Provider adapter | Credential type | Environment variables |
 | --- | --- | --- |
 | Anthropic/Claude | OAuth access token | `OMP_SUB_BURNDOWN_ANTHROPIC_ACCESS_TOKEN`, `OMP_SUB_BURNDOWN_ANTHROPIC_TOKEN`, or `OMP_SUB_BURNDOWN_CLAUDE_ACCESS_TOKEN` |
-| Google Gemini CLI | OAuth access token | `OMP_SUB_BURNDOWN_GOOGLE_GEMINI_CLI_ACCESS_TOKEN` or `OMP_SUB_BURNDOWN_GOOGLE_GEMINI_CLI_TOKEN` |
+| Google Gemini CLI | OAuth access token | `OMP_SUB_BURNDOWN_GOOGLE_GEMINI_CLI_ACCESS_TOKEN` or `OMP_SUB_BURNDOWN_GOOGLE_GEMINI_CLI_TOKEN` (OMP 18.x; OMP 19.1 no longer ships this adapter) |
 | GitHub Copilot | OAuth access token | `OMP_SUB_BURNDOWN_GITHUB_COPILOT_ACCESS_TOKEN` or `OMP_SUB_BURNDOWN_GITHUB_COPILOT_TOKEN` |
 | Google Antigravity | OAuth access token | `OMP_SUB_BURNDOWN_GOOGLE_ANTIGRAVITY_ACCESS_TOKEN` or `OMP_SUB_BURNDOWN_GOOGLE_ANTIGRAVITY_TOKEN` |
 | Kimi Code | OAuth access token | `OMP_SUB_BURNDOWN_KIMI_ACCESS_TOKEN`, `OMP_SUB_BURNDOWN_KIMI_TOKEN`, or `OMP_SUB_BURNDOWN_KIMI_CODE_ACCESS_TOKEN` |
@@ -154,6 +154,8 @@ Direct provider probes are opt-in. They use public `UsageProvider.fetchUsage` ad
 | Z.ai | API key | `OMP_SUB_BURNDOWN_ZAI_API_KEY` or `OMP_SUB_BURNDOWN_ZAI_KEY` |
 
 Each adapter also has an optional `OMP_SUB_BURNDOWN_<PROVIDER>_BASE_URL` variable matching the names in `src/sources/provider-endpoints.ts`. Use it only for a supported compatible endpoint.
+
+Adapters are resolved from the running OMP host. An adapter the host no longer exports is skipped and its credentials are ignored; the extension still loads.
 
 The initial matrix intentionally excludes public modules that do not provide an authoritative upstream subscription window for this feature:
 
