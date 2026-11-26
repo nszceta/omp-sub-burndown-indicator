@@ -1,4 +1,3 @@
-import { visibleWidth } from "@oh-my-pi/pi-tui";
 import type {
   AccountLabelsMode,
   DensityMode,
@@ -16,6 +15,10 @@ import {
   segmentSignalWithDensity,
   symbolsFor,
 } from "./symbols";
+
+// omp >=19 no longer exports visibleWidth from the bundled pi-tui module; Bun's
+// native width is ANSI- and East-Asian-width-aware and has no host coupling.
+const visibleWidth = (text: string): number => Bun.stringWidth(text);
 
 export interface BurndownTheme {
   fg(color: string, text: string): string;
